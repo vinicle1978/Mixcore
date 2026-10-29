@@ -68,7 +68,7 @@ jobs:
           killall -9 AudioComponentRegistrar 2>/dev/null || true
           sleep 2
           auval -a | grep -i mixcore || { echo "MixCore not registered with the AU system"; exit 1; }
-          auval -strict -v aufx Mxcr Mxca
+          auval -strict -v aufx Mxcr Vnau
 
       - name: Upload installer
         if: always()
