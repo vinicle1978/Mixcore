@@ -34,7 +34,8 @@ Stage**.
 * macOS and Windows builds have **not been run yet**; CI is configured
   ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) but untested.
 * Not validated in DAWs, with `pluginval`/`auval`, or with real interfaces.
-* No installers (.exe / .pkg), code signing or notarisation yet.
+* Installers (.pkg with AU/VST3/app, Windows .exe) are built by
+  [`build.yml`](.github/workflows/build.yml) but **not yet run**; not Developer-ID signed or notarised.
 * Milestones 2 and 4–8: multi-channel engine and routing, gate/EQ/compressor/
   saturation, channel registry and recommendations, master bus and loudness,
   LiveMixing/LiveStreaming workflows, standalone mixer. See the roadmap below.
@@ -71,7 +72,14 @@ xvfb-run -a ctest --test-dir build --output-on-failure   # GUI test needs a disp
 
 Engine only (fast, no JUCE): add `-DMIXCORE_BUILD_PLUGIN=OFF`.
 
-### Outputs and installation
+### Installers (recommended for DAW testing)
+
+GitHub → **Actions → Build installers → Run workflow** produces
+`MixCore-<version>-macOS.pkg` and `MixCore-<version>-Windows-Setup.exe`.
+The macOS job installs its own `.pkg` and validates the AU with `auval`.
+Testing in Logic Pro: [`docs/user-guide/installing-on-mac.md`](docs/user-guide/installing-on-mac.md).
+
+### Outputs and manual installation
 
 Built plugins are in `build/plugins/mixcore/MixCore_artefacts/Release/`:
 
@@ -100,7 +108,7 @@ docs/              architecture, DSP spec, testing, user guide
   [Realtime safety](docs/architecture/realtime-safety.md) · [Routing](docs/architecture/routing.md)
 * [Smart Gain Stage DSP spec](docs/dsp/smart-gain-stage.md)
 * [Test plan & results](docs/testing/test-plan.md) · [Listening tests](docs/testing/listening-tests.md)
-* [User quick start](docs/user-guide/quick-start.md)
+* [User quick start](docs/user-guide/quick-start.md) · [Installing on Mac / testing in Logic](docs/user-guide/installing-on-mac.md)
 * [Third-party licences](THIRD_PARTY_LICENSES.md)
 
 ## Roadmap
