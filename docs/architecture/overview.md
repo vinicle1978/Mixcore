@@ -17,6 +17,12 @@ a multi-channel audio engine, channel registry and routing do not exist yet).
 └───────────────▲───────────────────────────────▲────────────────┘
                 │ settings (atomics → struct)    │ telemetry (triple buffer)
 ┌───────────────┴───────────────────────────────┴────────────────┐
+│ modules/strip    (mixcore::strip) ChannelStrip: Gain -> Gate,  │
+│                  channel presets, strip-level Mix Coach        │
+├────────────────────────────────────────────────────────────────┤
+│ modules/gate     (mixcore::gate, no JUCE)                      │
+│   NoiseGate, GateLearner, GateProfiles, GateSettings           │
+├────────────────────────────────────────────────────────────────┤
 │ modules/gain     (mixcore::gain, no JUCE)                      │
 │   SmartGainStage   ── realtime processor                       │
 │   VocalRider, ActivityDetector, NoiseFloorTracker,             │
@@ -62,7 +68,8 @@ processing correctly when it is absent. See `decisions.md` ADR-006.
 
 | Milestone | Location |
 |---|---|
-| Gate/expander, EQ, compressor, saturation (M4) | `modules/<name>/`, same pattern as `modules/gain` |
+| Gate/expander (M4) | `modules/gate/` — **done**, wired in via `modules/strip/ChannelStrip` |
+| EQ, compressor, saturation (M4) | `modules/<name>/`, same pattern, appended to `ChannelStrip` |
 | Channel registry, shared analysis, recommendations (M5) | `engine/intelligence/`, `communication/` |
 | Master bus, loudness, tonal analysis (M6) | `modules/master/`, `engine/analysis/` |
 | Standalone live mixer (M7) | `apps/standalone/` (own JUCE app, not the plugin wrapper) |

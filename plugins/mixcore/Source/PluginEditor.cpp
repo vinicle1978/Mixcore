@@ -1,5 +1,8 @@
 #include "PluginEditor.h"
 
+#include "mixcore/strip/ChannelPresets.h"
+#include "mixcore/strip/StripCoach.h"
+
 namespace mixcore::plugin {
 
 namespace {
@@ -56,7 +59,20 @@ MixCoreEditor::MixCoreEditor(MixCoreProcessor& p) : AudioProcessorEditor(&p), pr
     setLookAndFeel(&lnf_);
     auto& apvts = processor_.state();
 
-    // Header
+    // Header: presets
+    presetBox_.setTooltip("Factory presets are starting points per source. Loading a preset never changes Static Gain "
+                          "(that is set per singer/mic by calibration).");
+    presetBox_.onChange = [this] { onPresetChosen(); };
+    addAndMakeVisible(presetBox_);
+    savePresetButton_.setTooltip("Save the current settings as your own preset (available in every session and DAW).");
+    savePresetButton_.onClick = [this] { promptSavePreset(); };
+    addAndMakeVisible(savePresetButton_);
+    deletePresetButton_.setTooltip("Delete the selected user preset.");
+    deletePresetButton_.onClick = [this] { promptDeletePreset(); };
+    addAndMakeVisible(deletePresetButton_);
+    rebuildPresetMenu();
+
+    // Header: mode & bypass
     advancedButton_.setClickingTogglesState(true);
     advancedButton_.setTooltip("Show timing, activity and safety parameters.");
     advancedButton_.onClick = [this] { setAdvanced(advancedButton_.getToggleState()); };
@@ -90,9 +106,29 @@ MixCoreEditor::MixCoreEditor(MixCoreProcessor& p) : AudioProcessorEditor(&p), pr
     staticChip_.setTooltip("Static gain: set once (manually or by calibration). Never changed automatically.");
     riderChip_.setTooltip("Rider gain: slow automatic correction while the vocal is active.");
     guardChip_.setTooltip("Peak guard reduction: safety intervention, reported separately from riding.");
-    for (auto* c : { &staticChip_, &riderChip_, &guardChip_ })
+    styleChip(gateChip_, theme::good);
+    gateChip_.setTooltip("Gate: gain reduction applied after Smart Gain. Click to open the Gate page.");
+    for (auto* c : { &staticChip_, &riderChip_, &guardChip_, &gateChip_ })
         addAndMakeVisible(*c);
     addAndMakeVisible(history_);
+
+    // Module pages
+    for (auto* tab : { &gainTab_, &gateTab_ })
+    {
+        tab->setClickingTogglesState(true);
+        tab->setRadioGroupId(4711);
+        tab->setColour(juce::TextButton::buttonOnColourId, theme::panelEdge.brighter(0.25f));
+        tab->setColour(juce::TextButton::textColourOnId, theme::text);
+        addAndMakeVisible(*tab);
+    }
+    gainTab_.setTooltip("Smart Gain: static gain, rider and peak safety.");
+    gateTab_.setTooltip("Gate / expander: source profiles, threshold learning, key filters.");
+    gainTab_.onClick = [this] { if (gainTab_.getToggleState()) setPage(Page::SmartGain); };
+    gateTab_.onClick = [this] { if (gateTab_.getToggleState()) setPage(Page::Gate); };
+    gainTab_.setToggleState(true, juce::dontSendNotification);
+    gateChip_.addMouseListener(this, false);
+    addChildComponent(gatePanel_);
+    addChildComponent(gateLearnPanel_);
 
     // Main controls
     addKnob(target_, ids::targetRms, "Target RMS", theme::rider,
@@ -191,12 +227,50 @@ void MixCoreEditor::setAdvanced(bool advanced)
 {
     advanced_ = advanced;
     advancedButton_.setToggleState(advanced, juce::dontSendNotification);
+    gatePanel_.setAdvanced(advanced);
+    setPage(page_); // re-applies visibility and layout
+}
+
+juce::Rectangle<int> MixCoreEditor::statusTextArea() const
+{
+    return gainTab_.getBounds().withLeft(gateTab_.getRight() + 8).withRight(activityLabel_.getRight());
+}
+
+void MixCoreEditor::setPage(Page page)
+{
+    page_ = page;
+    const bool gainPage = page == Page::SmartGain;
+    gainTab_.setToggleState(gainPage, juce::dontSendNotification);
+    gateTab_.setToggleState(!gainPage, juce::dontSendNotification);
+
+    history_.setVisible(gainPage);
+    for (auto* k : { &target_, &staticGain_, &strength_ })
+    {
+        k->slider.setVisible(gainPage);
+        k->label.setVisible(gainPage);
+    }
+    riderToggle_.setVisible(gainPage);
+    guardToggle_.setVisible(gainPage);
     for (auto& k : advancedKnobs_)
     {
-        k->slider.setVisible(advanced);
-        k->label.setVisible(advanced);
+        k->slider.setVisible(gainPage && advanced_);
+        k->label.setVisible(gainPage && advanced_);
     }
+    gatePanel_.setVisible(!gainPage);
+
+    for (juce::Component* c : { static_cast<juce::Component*>(&calibrateButton_), static_cast<juce::Component*>(&applyButton_),
+                                static_cast<juce::Component*>(&cancelCalButton_), static_cast<juce::Component*>(&calibrationText_) })
+        c->setVisible(gainPage);
+    if (!gainPage)
+    {
+        applySafeButton_.setVisible(false);
+        progressBar_.setVisible(false);
+    }
+    gateLearnPanel_.setVisible(!gainPage);
+    if (gainPage)
+        updateCalibrationUi();
     resized();
+    repaint();
 }
 
 void MixCoreEditor::paint(juce::Graphics& g)
@@ -205,17 +279,17 @@ void MixCoreEditor::paint(juce::Graphics& g)
     auto header = getLocalBounds().removeFromTop(52).reduced(18, 0);
     g.setColour(theme::text);
     g.setFont(theme::font(22.0f, true));
-    g.drawText("MixCore", header.removeFromLeft(110), juce::Justification::centredLeft);
+    g.drawText("MixCore", header.removeFromLeft(108), juce::Justification::centredLeft);
     g.setColour(theme::muted);
     g.setFont(theme::font(13.0f));
-    g.drawText("Smart Gain Stage  |  Lead vocal", header.removeFromLeft(260), juce::Justification::centredLeft);
+    g.drawText("Channel", header.removeFromLeft(80), juce::Justification::centredLeft);
 
     if (telemetry_.sampleRate > 0.0)
     {
         g.setFont(theme::font(11.0f));
-        g.drawText(juce::String(telemetry_.sampleRate / 1000.0, 1) + " kHz   latency " + juce::String(telemetry_.latencySamples)
-                       + " smp",
-                   header.removeFromLeft(220), juce::Justification::centredLeft);
+        const int latency = telemetry_.latencySamples + gateTelemetry_.latencySamples;
+        g.drawText(juce::String(telemetry_.sampleRate / 1000.0, 1) + " kHz  |  latency " + juce::String(latency) + " smp",
+                   statusTextArea(), juce::Justification::centredRight);
     }
 
     // Panels
@@ -229,16 +303,18 @@ void MixCoreEditor::paint(juce::Graphics& g)
     g.drawText("STATIC", staticChip_.getBounds().translated(0, -16).withHeight(14), juce::Justification::centred);
     g.drawText("RIDER", riderChip_.getBounds().translated(0, -16).withHeight(14), juce::Justification::centred);
     g.drawText("PEAK GUARD", guardChip_.getBounds().translated(0, -16).withHeight(14), juce::Justification::centred);
-    g.drawText("CALIBRATION", juce::Rectangle<int>(getWidth() - 340, 66, 200, 16), juce::Justification::centredLeft);
+    g.drawText("GATE", gateChip_.getBounds().translated(0, -16).withHeight(14), juce::Justification::centred);
+    g.drawText(page_ == Page::Gate ? "GATE THRESHOLD" : "CALIBRATION", juce::Rectangle<int>(getWidth() - 340, 66, 200, 16),
+               juce::Justification::centredLeft);
     g.drawText("MIX COACH", coachText_.getBounds().translated(0, -20).withHeight(16), juce::Justification::centredLeft);
 
     // Signal-flow arrows between the chips.
     g.setColour(theme::muted);
-    for (auto* c : { &staticChip_, &riderChip_ })
+    for (auto* c : { &staticChip_, &riderChip_, &guardChip_ })
     {
         const auto r = c->getBounds();
         g.drawArrow(juce::Line<float>(static_cast<float>(r.getRight() + 4), static_cast<float>(r.getCentreY()),
-                                      static_cast<float>(r.getRight() + 18), static_cast<float>(r.getCentreY())),
+                                      static_cast<float>(r.getRight() + 14), static_cast<float>(r.getCentreY())),
                     1.5f, 6.0f, 6.0f);
     }
 }
@@ -247,9 +323,15 @@ void MixCoreEditor::resized()
 {
     auto area = getLocalBounds();
     auto header = area.removeFromTop(52).reduced(18, 12);
-    bypassButton_.setBounds(header.removeFromRight(90));
+    bypassButton_.setBounds(header.removeFromRight(84));
     header.removeFromRight(8);
-    advancedButton_.setBounds(header.removeFromRight(100));
+    advancedButton_.setBounds(header.removeFromRight(96));
+    header.removeFromLeft(196); // title text
+    presetBox_.setBounds(header.removeFromLeft(juce::jmin(300, header.getWidth() - 160)));
+    header.removeFromLeft(6);
+    savePresetButton_.setBounds(header.removeFromLeft(62));
+    header.removeFromLeft(6);
+    deletePresetButton_.setBounds(header.removeFromLeft(70));
 
     area.reduce(12, 8);
     area.removeFromBottom(4);
@@ -266,6 +348,7 @@ void MixCoreEditor::resized()
     auto right = area.removeFromRight(340).reduced(12, 8);
     right.removeFromTop(22);
     auto cal = right.removeFromTop(220);
+    gateLearnPanel_.setBounds(cal);
     calibrateButton_.setBounds(cal.removeFromTop(30));
     cal.removeFromTop(6);
     progressBar_.setBounds(cal.removeFromTop(10));
@@ -283,17 +366,25 @@ void MixCoreEditor::resized()
 
     // Centre
     auto centre = area.reduced(16, 8);
-    auto status = centre.removeFromTop(26);
-    activityLabel_.setBounds(status);
-    centre.removeFromTop(22);
-    auto chips = centre.removeFromTop(38);
-    const int chipW = (chips.getWidth() - 2 * 24) / 3;
-    staticChip_.setBounds(chips.removeFromLeft(chipW));
-    chips.removeFromLeft(24);
-    riderChip_.setBounds(chips.removeFromLeft(chipW));
-    chips.removeFromLeft(24);
-    guardChip_.setBounds(chips);
-    centre.removeFromTop(12);
+    auto tabs = centre.removeFromTop(26);
+    gainTab_.setBounds(tabs.removeFromLeft(110));
+    tabs.removeFromLeft(4);
+    gateTab_.setBounds(tabs.removeFromLeft(80));
+    centre.removeFromTop(4);
+    activityLabel_.setBounds(centre.removeFromTop(20));
+    centre.removeFromTop(16);
+    auto chips = centre.removeFromTop(36);
+    constexpr int gap = 18;
+    const int chipW = (chips.getWidth() - 3 * gap) / 4;
+    for (auto* chip : { &staticChip_, &riderChip_, &guardChip_ })
+    {
+        chip->setBounds(chips.removeFromLeft(chipW));
+        chips.removeFromLeft(gap);
+    }
+    gateChip_.setBounds(chips);
+    centre.removeFromTop(10);
+
+    gatePanel_.setBounds(centre);
 
     if (!advanced_)
     {
@@ -313,9 +404,9 @@ void MixCoreEditor::resized()
     else
     {
         // Advanced: compact history, main knobs in a row, advanced knob grid.
-        history_.setBounds(centre.removeFromTop(120));
-        centre.removeFromTop(8);
-        auto mainRow = centre.removeFromTop(96);
+        history_.setBounds(centre.removeFromTop(80));
+        centre.removeFromTop(6);
+        auto mainRow = centre.removeFromTop(80);
         auto toggles = mainRow.removeFromRight(110);
         riderToggle_.setBounds(toggles.removeFromTop(mainRow.getHeight() / 2).withSizeKeepingCentre(110, 26));
         guardToggle_.setBounds(toggles.withSizeKeepingCentre(110, 26));
@@ -347,15 +438,34 @@ void MixCoreEditor::timerCallback() { refresh(); }
 void MixCoreEditor::refresh()
 {
     const bool fresh = processor_.readTelemetry(telemetry_);
+    const bool gateFresh = processor_.readGateTelemetry(gateTelemetry_);
     const auto& t = telemetry_;
+    const auto& gt = gateTelemetry_;
     const auto settings = processor_.currentSettings();
     constexpr double dt = 1.0 / kTimerHz;
 
     if (fresh)
     {
         inputMeter_.setLevels(t.inputRmsDb, t.inputPeakDb, dt);
-        outputMeter_.setLevels(t.outputRmsDb, t.outputPeakDb, dt);
         history_.push(t.riderGainDb, t.peakGuardReductionDb, static_cast<int>(t.activity));
+    }
+    if (gateFresh)
+        outputMeter_.setLevels(gt.outputRmsDb, gt.outputPeakDb, dt); // channel output (after the gate)
+    gatePanel_.update(gt, gateFresh);
+    if (page_ == Page::Gate)
+        gateLearnPanel_.update(gt.learnProgress);
+
+    if (!gt.enabled)
+    {
+        gateChip_.setText("off", juce::dontSendNotification);
+        gateChip_.setColour(juce::Label::textColourId, theme::muted);
+    }
+    else
+    {
+        const bool open = gt.state != gate::GateState::Closed;
+        gateChip_.setText(open && gt.gainReductionDb < 0.5f ? "open" : "-" + juce::String(gt.gainReductionDb, 1) + " dB",
+                          juce::dontSendNotification);
+        gateChip_.setColour(juce::Label::textColourId, open ? theme::good : theme::safety);
     }
     inputMeter_.setAlert(t.inputClipping);
     outputMeter_.setAlert(t.peakGuardActive);
@@ -365,7 +475,7 @@ void MixCoreEditor::refresh()
 
     inputReadout_.setText("RMS " + theme::formatDb(t.inputRmsDb, 1, false) + "\npk " + theme::formatDb(inputMeter_.peakHoldDb(), 1, false),
                           juce::dontSendNotification);
-    outputReadout_.setText("RMS " + theme::formatDb(t.outputRmsDb, 1, false) + "\nTP " + theme::formatDb(t.outputTruePeakDb, 1, false),
+    outputReadout_.setText("RMS " + theme::formatDb(gt.outputRmsDb, 1, false) + "\nTP " + theme::formatDb(t.outputTruePeakDb, 1, false),
                            juce::dontSendNotification);
 
     activityLabel_.setText(t.bypassed ? "BYPASSED" : activityText(t.activity), juce::dontSendNotification);
@@ -379,13 +489,15 @@ void MixCoreEditor::refresh()
     guardChip_.setText(!t.peakGuardEnabled ? "off" : (t.peakGuardActive ? "-" + juce::String(t.peakGuardReductionDb, 1) + " dB" : "ready"),
                        juce::dontSendNotification);
 
-    updateCalibrationUi();
+    if (page_ == Page::SmartGain)
+        updateCalibrationUi();
     if (--coachCountdown_ <= 0)
     {
         coachCountdown_ = kTimerHz / 3; // ~3 Hz is plenty for text
         updateCoach(t);
+        updatePresetDisplay();
     }
-    repaint(getLocalBounds().removeFromTop(52)); // header sample-rate/latency text
+    repaint(statusTextArea()); // sample-rate/latency text
 }
 
 void MixCoreEditor::updateCalibrationUi()
@@ -434,7 +546,7 @@ void MixCoreEditor::updateCalibrationUi()
 
 void MixCoreEditor::updateCoach(const gain::SmartGainTelemetry& t)
 {
-    const auto advice = gain::evaluateSmartGainAdvice(t, processor_.currentSettings());
+    const auto advice = strip::evaluateStripAdvice(t, gateTelemetry_, processor_.currentChannelSettings());
 
     juce::String key;
     for (const auto& a : advice)
@@ -473,6 +585,177 @@ void MixCoreEditor::updateCoach(const gain::SmartGainTelemetry& t)
         coachText_.insertTextAtCaret((a.changesAudioAutomatically ? "Automatic: " : "Manual: ") + juce::String(a.automaticNote) + "\n\n");
     }
     coachText_.moveCaretToTop(false);
+}
+
+// ------------------------------------------------------------------ Presets
+
+void MixCoreEditor::rebuildPresetMenu()
+{
+    presetBox_.clear(juce::dontSendNotification);
+
+    std::string lastCategory;
+    const auto& factory = strip::channelPresets();
+    for (size_t i = 0; i < factory.size(); ++i)
+    {
+        if (factory[i].category != lastCategory)
+        {
+            if (!lastCategory.empty())
+                presetBox_.addSeparator();
+            presetBox_.addSectionHeading(juce::String(factory[i].category));
+            lastCategory = factory[i].category;
+        }
+        presetBox_.addItem(juce::String(factory[i].name), static_cast<int>(i) + 1);
+    }
+
+    userPresetNames_.clear();
+    const auto user = processor_.presetManager().userPresets();
+    presetBox_.addSeparator();
+    presetBox_.addSectionHeading("My Presets");
+    if (user.isEmpty())
+    {
+        presetBox_.addItem("(none yet - press Save)", kUserIdBase - 1);
+        presetBox_.setItemEnabled(kUserIdBase - 1, false);
+    }
+    for (int i = 0; i < user.size(); ++i)
+    {
+        userPresetNames_.add(user[i].name);
+        presetBox_.addItem(user[i].name, kUserIdBase + i);
+    }
+    lastPresetDisplay_.clear();
+    updatePresetDisplay();
+}
+
+void MixCoreEditor::updatePresetDisplay()
+{
+    const auto name = processor_.currentPresetName();
+    const bool isUser = processor_.currentPresetIsUser();
+    const bool modified = processor_.isPresetModified();
+
+    const auto display = name + (modified ? "  *" : "");
+    if (display == lastPresetDisplay_)
+        return;
+    lastPresetDisplay_ = display;
+
+    int id = 0;
+    if (isUser)
+    {
+        const int idx = userPresetNames_.indexOf(name);
+        id = idx >= 0 ? kUserIdBase + idx : 0;
+    }
+    else
+    {
+        const auto& factory = strip::channelPresets();
+        for (size_t i = 0; i < factory.size(); ++i)
+            if (juce::String(factory[i].name) == name)
+                id = static_cast<int>(i) + 1;
+    }
+
+    if (modified || id == 0)
+        presetBox_.setText(display, juce::dontSendNotification); // shows "Name  *" without selecting an item
+    else
+        presetBox_.setSelectedId(id, juce::dontSendNotification);
+
+    deletePresetButton_.setEnabled(isUser && userPresetNames_.contains(name));
+    presetBox_.setTooltip(modified ? "Settings changed since this preset was loaded (*). Save to keep them as your own preset."
+                                   : "Factory presets are starting points per source. Loading a preset never changes Static Gain.");
+}
+
+void MixCoreEditor::onPresetChosen()
+{
+    const int id = presetBox_.getSelectedId();
+    if (id <= 0)
+        return;
+    if (id >= kUserIdBase)
+    {
+        const int idx = id - kUserIdBase;
+        if (idx < userPresetNames_.size() && !processor_.loadUserPreset(userPresetNames_[idx]))
+        {
+            juce::AlertWindow::showAsync(juce::MessageBoxOptions()
+                                             .withIconType(juce::MessageBoxIconType::WarningIcon)
+                                             .withTitle("Preset could not be loaded")
+                                             .withMessage("The preset file is missing or damaged.")
+                                             .withButton("OK"),
+                                         nullptr);
+            rebuildPresetMenu();
+        }
+    }
+    else
+    {
+        const auto& factory = strip::channelPresets();
+        if (id - 1 < static_cast<int>(factory.size()))
+            processor_.loadFactoryPreset(juce::String(factory[static_cast<size_t>(id - 1)].name));
+    }
+    lastPresetDisplay_.clear();
+    updatePresetDisplay();
+}
+
+void MixCoreEditor::promptSavePreset()
+{
+    auto* window = new juce::AlertWindow("Save preset",
+                                         "Name your preset. It will appear under \"My Presets\" in every session and DAW.\n"
+                                         "Static gain is stored too, but loading a preset never changes static gain.",
+                                         juce::MessageBoxIconType::NoIcon, this);
+    const auto suggestion = processor_.currentPresetIsUser() ? processor_.currentPresetName()
+                                                              : processor_.currentPresetName() + " (mine)";
+    window->addTextEditor("name", suggestion, "Preset name:");
+    window->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    juce::Component::SafePointer<MixCoreEditor> safe(this);
+    window->enterModalState(true, juce::ModalCallbackFunction::create([safe, window](int result) {
+                                if (result != 1 || safe == nullptr)
+                                    return;
+                                const auto name = PresetManager::sanitiseName(window->getTextEditorContents("name"));
+                                auto doSave = [safe, name] {
+                                    if (safe == nullptr)
+                                        return;
+                                    const auto error = safe->processor_.saveUserPreset(name);
+                                    if (error.isNotEmpty())
+                                        juce::AlertWindow::showAsync(juce::MessageBoxOptions()
+                                                                         .withIconType(juce::MessageBoxIconType::WarningIcon)
+                                                                         .withTitle("Preset not saved")
+                                                                         .withMessage(error)
+                                                                         .withButton("OK"),
+                                                                     nullptr);
+                                    safe->rebuildPresetMenu();
+                                };
+                                if (safe->processor_.presetManager().exists(name))
+                                    juce::AlertWindow::showAsync(juce::MessageBoxOptions()
+                                                                     .withIconType(juce::MessageBoxIconType::QuestionIcon)
+                                                                     .withTitle("Replace preset?")
+                                                                     .withMessage("A preset called \"" + name + "\" already exists.")
+                                                                     .withButton("Replace")
+                                                                     .withButton("Cancel"),
+                                                                 [doSave](int r) {
+                                                                     if (r == 1)
+                                                                         doSave();
+                                                                 });
+                                else
+                                    doSave();
+                            }),
+                            true);
+}
+
+void MixCoreEditor::promptDeletePreset()
+{
+    if (!processor_.currentPresetIsUser())
+        return;
+    const auto name = processor_.currentPresetName();
+    juce::Component::SafePointer<MixCoreEditor> safe(this);
+    juce::AlertWindow::showAsync(juce::MessageBoxOptions()
+                                     .withIconType(juce::MessageBoxIconType::WarningIcon)
+                                     .withTitle("Delete preset?")
+                                     .withMessage("Delete \"" + name + "\"? This removes the preset file and cannot be undone. "
+                                                  "Your current settings stay as they are.")
+                                     .withButton("Delete")
+                                     .withButton("Cancel"),
+                                 [safe, name](int r) {
+                                     if (r == 1 && safe != nullptr)
+                                     {
+                                         safe->processor_.deleteUserPreset(name);
+                                         safe->rebuildPresetMenu();
+                                     }
+                                 });
 }
 
 } // namespace mixcore::plugin

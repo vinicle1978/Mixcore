@@ -15,7 +15,7 @@ Timing-sensitive suites (`realtime`, `performance`) are marked `RUN_SERIAL`.
 
 * **Date:** 2026-10-29 · **Commit:** see `git log` · **Machine:** Linux x86_64 dev
   container, 2 vCPU Intel Xeon @ 2.10 GHz, GCC 13.3, JUCE 8.0.4, Catch2 3.7.1.
-* **Result: 37 / 37 CTest tests passed** (three consecutive parallel runs), and
+* **Result: 74 / 74 CTest tests passed** (after the gate; previously 48 / 48 with presets, 37 / 37 before) (three consecutive parallel runs), and
   again from a **fresh clone configured exactly like the Linux CI job**
   (JUCE/Catch2 fetched from GitHub, engine `-Werror`).
 * Engine + tests also built with **Clang 18 / libc++ with `-Werror`**: all
@@ -51,6 +51,43 @@ Timing-sensitive suites (`realtime`, `performance`) are marked `RUN_SERIAL`.
 | Long-duration realtime performance | *perf: Ten minutes of stereo audio…* | see below | pass |
 | No allocation / no locks in callback | *realtime: The audio path never allocates*, *…safe across threads* | 0 allocations, 0 frees; TSan clean; p99.9 block time < 25 % of budget | pass |
 | Regression | *Smart Gain lead-vocal regression…* | per-second rider gain (±0.02 dB), output RMS (±0.05 dB) and activity match `tests/regression/reference/smart_gain_lead_vocal_v1.csv` | pass |
+
+## Preset tests
+
+| Test | Asserts | Result |
+|---|---|---|
+| Factory list well-formed | ≥ 10 presets, unique names, all four categories, values within ranges, no session values, "Natural" == engine defaults | pass |
+| Apply keeps session values | static gain and bypass kept; "modified" detection ignores static gain | pass |
+| Airy vs Tight behaviour | on the same quiet→loud vocal, Tight lifts and cuts > 1 dB more and moves > 1.5× faster; Airy never exceeds its 4 dB/s limit | pass |
+| Kick calibrates on a groove | synthetic kick at 110 BPM over bleed: calibration completes, median within 2 dB of reference; rider never moves; output bit-identical | pass |
+| Snare calibrates on backbeats | snare on 2 and 4 at 100 BPM: completes, within 2.5 dB | pass |
+| Vocal settings can't calibrate drums | same snare groove with vocal defaults never completes (why drum presets exist) | pass |
+| Live detector change | changing the detector high-pass mid-phrase causes no false phrase end | pass |
+| Plugin: host programs | factory presets exposed as DAW programs; every preset survives the round trip through host parameters | pass |
+| Plugin: user presets | save/list/load/overwrite/delete, factory names reserved, empty names rejected, damaged files skipped, shared across instances | pass |
+| Plugin: session restore | preset name and "modified" state survive save/reopen | pass |
+| Plugin: editor | preset menu lists factory and user presets; renders | pass |
+
+## Gate tests (spec §8)
+
+| Spec item | Test | Result |
+|---|---|---|
+| Attenuation | closed = −range within 0.05 dB (10/40/80 dB); open = unity | pass |
+| Triggering & timing | open within attack (+2 samples); held open through hold; fully closed by detector decay + hold + release; linear-in-dB ramp | pass |
+| False-trigger rate | kick gate, snare bleed 20 dB down between kicks: opens == kicks, every kick onset within 0.5 dB | pass |
+| Key filter | kick key lowers snare bleed in the detector ≥ 3.5 dB; profile threshold ≥ 4 dB above keyed bleed | pass |
+| Transient trigger | swelling wash never opens it, a hit does; without it the wash holds it open | pass |
+| Latency | lookahead reported exactly (72 samples at 48 kHz for 1.5 ms); onset preserved (±0.05 dB) vs > 3 dB loss without | pass |
+| Recovery / hysteresis | ±2 dB wobble at threshold: 1 open with 6 dB hysteresis, ≥ 10 without | pass |
+| Expander curve | (thr − level) × (ratio − 1) within 0.5 dB, capped at range | pass |
+| Vocal tails | phrases ±0.1 dB, first 200 ms of tails > −1 dB, noise between phrases −8 to −10 dB | pass |
+| Sample rate / block size / stereo | timing within 1 ms at 44.1–96 kHz; bit-identical across block sizes; linked gain | pass |
+| Bypass / off | delayed copy, exactly the reported latency | pass |
+| Learn threshold | bimodal analysis, honest "no separation", silence ignored, percussive rule; end to end on kick + bleed: learned threshold opens on every kick and never on bleed | pass |
+| Stress | random (incl. invalid) settings, NaN/Inf input, never adds gain | pass |
+| Strip | latency = guard + lookahead; strip bypass = delayed copy; channel presets; coach (chatter, stuck closed) | pass |
+| Realtime | full strip incl. learning, filter redesigns and latency changes: 0 allocations | pass |
+| Plugin | gate params match engine; audio gated at −40 dB in plugin; 72-sample latency; channel presets set the gate, profiles leave Smart Gain alone; learn → apply end to end; user presets include gate; old v1 preset loads with gate off; Gate page renders | pass |
 
 ## Plugin adapter tests
 

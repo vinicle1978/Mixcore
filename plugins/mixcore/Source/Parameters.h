@@ -1,9 +1,10 @@
 #pragma once
-// Host-visible parameters for MixCore, mapped 1:1 onto
-// mixcore::gain::SmartGainSettings. Ranges and defaults come from the engine
-// schema so there is a single source of truth.
+// Host-visible parameters for MixCore, mapped 1:1 onto the engine settings
+// (mixcore::gain::SmartGainSettings and mixcore::gate::GateSettings). Ranges
+// and defaults come from the engine schema so there is a single source of
+// truth; tests assert they match.
 
-#include "mixcore/gain/SmartGainSettings.h"
+#include "mixcore/strip/ChannelStrip.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -29,18 +30,35 @@ inline constexpr const char* idleRate = "idleRate";
 inline constexpr const char* activityConfirm = "activityConfirm";
 inline constexpr const char* phraseHold = "phraseHold";
 inline constexpr const char* activityMargin = "activityMargin";
+inline constexpr const char* detectorHpf = "detectorHpf";
 inline constexpr const char* peakWarning = "peakWarning";
 inline constexpr const char* peakRestrict = "peakRestrict";
 inline constexpr const char* peakGuard = "peakGuard";
 inline constexpr const char* guardCeiling = "guardCeiling";
 inline constexpr const char* bypass = "bypass";
+
+inline constexpr const char* gateEnabled = "gateEnabled";
+inline constexpr const char* gateThreshold = "gateThreshold";
+inline constexpr const char* gateRange = "gateRange";
+inline constexpr const char* gateRatio = "gateRatio";
+inline constexpr const char* gateHysteresis = "gateHysteresis";
+inline constexpr const char* gateAttack = "gateAttack";
+inline constexpr const char* gateHold = "gateHold";
+inline constexpr const char* gateRelease = "gateRelease";
+inline constexpr const char* gateScHpf = "gateScHpf";
+inline constexpr const char* gateScLpf = "gateScLpf";
+inline constexpr const char* gateRms = "gateRms";
+inline constexpr const char* gateTransient = "gateTransient";
+inline constexpr const char* gateTransientDb = "gateTransientDb";
+inline constexpr const char* gateLookahead = "gateLookahead";
 } // namespace ids
 
-struct FloatParamSpec
+template <typename Settings>
+struct FloatSpec
 {
     const char* id;
     const char* name;
-    float gain::SmartGainSettings::*member;
+    float Settings::*member;
     float min;
     float max;
     float step;
@@ -48,18 +66,27 @@ struct FloatParamSpec
     const char* unit;
     int decimals;
     bool advanced;    ///< Shown only in Advanced mode.
+    bool automatable = true;
 };
 
-struct BoolParamSpec
+template <typename Settings>
+struct BoolSpec
 {
     const char* id;
     const char* name;
-    bool gain::SmartGainSettings::*member;
+    bool Settings::*member;
     bool automatable;
 };
 
+using FloatParamSpec = FloatSpec<gain::SmartGainSettings>;
+using BoolParamSpec = BoolSpec<gain::SmartGainSettings>;
+using GateFloatParamSpec = FloatSpec<gate::GateSettings>;
+using GateBoolParamSpec = BoolSpec<gate::GateSettings>;
+
 const std::vector<FloatParamSpec>& floatParamSpecs();
 const std::vector<BoolParamSpec>& boolParamSpecs();
+const std::vector<GateFloatParamSpec>& gateFloatParamSpecs();
+const std::vector<GateBoolParamSpec>& gateBoolParamSpecs();
 
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
@@ -70,10 +97,14 @@ class ParameterReader
 public:
     explicit ParameterReader(juce::AudioProcessorValueTreeState& state);
     gain::SmartGainSettings read() const noexcept;
+    gate::GateSettings readGate() const noexcept;
+    strip::ChannelSettings readChannel() const noexcept { return { read(), readGate() }; }
 
 private:
     std::vector<std::pair<std::atomic<float>*, float gain::SmartGainSettings::*>> floats_;
     std::vector<std::pair<std::atomic<float>*, bool gain::SmartGainSettings::*>> bools_;
+    std::vector<std::pair<std::atomic<float>*, float gate::GateSettings::*>> gateFloats_;
+    std::vector<std::pair<std::atomic<float>*, bool gate::GateSettings::*>> gateBools_;
 };
 
 } // namespace mixcore::plugin

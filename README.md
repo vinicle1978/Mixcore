@@ -19,12 +19,21 @@ Stage**.
   * **peak safety:** input clip detection, output peak warning, preventative
     rider restriction, optional 2 ms lookahead peak guard (reported latency)
   * lock-free telemetry snapshots, Mix Coach explanations
+  * **12 factory presets** (lead vocal, backing vocal airy/tight/choir, speech,
+    kick, snare, toms) and **user presets** saved to disk, shared across DAWs
+    ([presets guide](docs/user-guide/presets.md))
   * realtime-safe: zero allocations / locks on the audio path (tested)
+* **Gate / expander** (new): source-aware gating after Smart Gain: 24 dB/oct
+  key filters, peak/RMS detector, hysteresis, hold, transient trigger,
+  lookahead with reported latency, **Learn threshold**, and 9 profiles
+  (vocal gentle/tight, backing vocal, speech, kick, snare, toms, overheads,
+  instrument). Channel presets now set Smart Gain + Gate together.
+  [Gate spec](docs/dsp/gate.md)
 * **MixCore plugin + standalone app** (JUCE 8): VST3, AU (macOS), Standalone,
   with host parameters, state save/restore, host bypass, latency reporting and
   an editor showing live meters, gain chain, 20 s rider history, calibration
   and Mix Coach.
-* **37 automated tests** (unit, integration, regression, realtime, performance,
+* **74 automated tests** (unit, integration, regression, realtime, performance,
   plugin) — all passing on Linux; engine also passes under Clang/libc++
   `-Werror`, ASan/UBSan and TSan. Details: [`docs/testing/test-plan.md`](docs/testing/test-plan.md).
 
@@ -97,6 +106,8 @@ Unsigned macOS builds must be allowed in *System Settings → Privacy & Security
 engine/core        units (DbMath), lock-free TripleBuffer           (header-only)
 engine/dsp         RMS window, true peak, lookahead guard, biquad
 modules/gain       Smart Gain Stage, rider, activity, calibration, coach
+modules/gate       gate/expander, key filters, threshold learning, profiles
+modules/strip      channel strip (Smart Gain -> Gate), channel presets, strip coach
 plugins/mixcore    JUCE plugin/standalone adapter and editor
 tests/             unit, integration, regression, realtime, performance, plugin
 docs/              architecture, DSP spec, testing, user guide
@@ -106,7 +117,7 @@ docs/              architecture, DSP spec, testing, user guide
 
 * [Architecture overview](docs/architecture/overview.md) · [Decisions](docs/architecture/decisions.md) ·
   [Realtime safety](docs/architecture/realtime-safety.md) · [Routing](docs/architecture/routing.md)
-* [Smart Gain Stage DSP spec](docs/dsp/smart-gain-stage.md)
+* [Smart Gain Stage DSP spec](docs/dsp/smart-gain-stage.md) · [Gate DSP spec](docs/dsp/gate.md)
 * [Test plan & results](docs/testing/test-plan.md) · [Listening tests](docs/testing/listening-tests.md)
 * [User quick start](docs/user-guide/quick-start.md) · [Installing on Mac / testing in Logic](docs/user-guide/installing-on-mac.md)
 * [Third-party licences](THIRD_PARTY_LICENSES.md)
@@ -116,7 +127,7 @@ docs/              architecture, DSP spec, testing, user guide
 1. ~~Repository & architecture~~ ✔
 2. Audio foundation: multi-channel engine, channel state, routing — *partly (meters, realtime checks)*
 3. ~~Smart Gain Stage~~ ✔ (pending listening tests)
-4. Gate/expander, parametric EQ, compressor, saturation
+4. ~~Gate/expander~~ ✔ (pending listening tests), parametric EQ, compressor, saturation
 5. Channel registry, shared analysis, recommendations (preview/apply/undo)
 6. Master bus, loudness & true peak, tonal analysis, LiveMixing / LiveStreaming
 7. Standalone live mixer: strips, buses, scenes, Mix Coach, setup wizard

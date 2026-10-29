@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/GatePanel.h"
 #include "ui/Meters.h"
 #include "ui/Theme.h"
 
@@ -27,6 +28,17 @@ public:
     void refresh();
     void setAdvanced(bool advanced);
 
+    /// Rebuild the preset menu (factory + user presets from disk).
+    void rebuildPresetMenu();
+
+    enum class Page { SmartGain, Gate };
+    void setPage(Page page);
+    void mouseUp(const juce::MouseEvent& e) override
+    {
+        if (e.eventComponent == &gateChip_)
+            setPage(Page::Gate);
+    }
+
 private:
     struct Knob
     {
@@ -40,12 +52,23 @@ private:
                  const juce::String& tooltip);
     void updateCalibrationUi();
     void updateCoach(const gain::SmartGainTelemetry& t);
+    void updatePresetDisplay();
+    juce::Rectangle<int> statusTextArea() const;
+    void onPresetChosen();
+    void promptSavePreset();
+    void promptDeletePreset();
 
     MixCoreProcessor& processor_;
     theme::LookAndFeel lnf_;
     juce::TooltipWindow tooltips_ { this, 600 };
 
     // Header
+    juce::ComboBox presetBox_;
+    juce::TextButton savePresetButton_ { "Save" };
+    juce::TextButton deletePresetButton_ { "Delete" };
+    juce::StringArray userPresetNames_;   // index i  <-> combo id kUserIdBase + i
+    juce::String lastPresetDisplay_;
+    static constexpr int kUserIdBase = 1000;
     juce::TextButton advancedButton_ { "Advanced" };
     juce::TextButton bypassButton_ { "Bypass" };
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttachment_;
@@ -56,7 +79,13 @@ private:
     juce::Label inputReadout_, outputReadout_;
     GainHistory history_;
     juce::Label activityLabel_;
-    juce::Label staticChip_, riderChip_, guardChip_;
+    juce::Label staticChip_, riderChip_, guardChip_, gateChip_;
+    juce::TextButton gainTab_ { "Smart Gain" };
+    juce::TextButton gateTab_ { "Gate" };
+    Page page_ = Page::SmartGain;
+    GatePanel gatePanel_ { processor_ };
+    GateLearnPanel gateLearnPanel_ { processor_ };
+    gate::GateTelemetry gateTelemetry_;
 
     // Main controls
     Knob target_, staticGain_, strength_;
@@ -81,7 +110,7 @@ private:
 
     // Mix Coach
     juce::TextEditor coachText_;
-    juce::String lastCoachKey_;
+    juce::String lastCoachKey_ { "<never shown>" }; // forces the first update to draw, even "All clear"
     int coachCountdown_ = 0;
 
     gain::SmartGainTelemetry telemetry_;

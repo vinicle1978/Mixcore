@@ -22,9 +22,41 @@ const std::vector<FloatParamSpec>& floatParamSpecs()
         { ids::activityConfirm, "Activity Confirm", &S::activityConfirmMs, 0.0f, 500.0f, 1.0f, 0.0f, "ms", 0, true },
         { ids::phraseHold, "Phrase Hold", &S::phraseHoldMs, 0.0f, 2000.0f, 1.0f, 300.0f, "ms", 0, true },
         { ids::activityMargin, "Activity Margin", &S::activityMarginDb, 3.0f, 30.0f, 0.5f, 0.0f, "dB", 1, true },
+        { ids::detectorHpf, "Detector HPF", &S::detectorHpfHz, 20.0f, 400.0f, 1.0f, 100.0f, "Hz", 0, true },
         { ids::peakWarning, "Peak Warning", &S::peakWarningDb, -24.0f, 0.0f, 0.1f, 0.0f, "dBFS", 1, true },
         { ids::peakRestrict, "Peak Restrict", &S::peakRestrictDb, -24.0f, 0.0f, 0.1f, 0.0f, "dBFS", 1, true },
         { ids::guardCeiling, "Guard Ceiling", &S::peakGuardCeilingDb, -24.0f, 0.0f, 0.1f, 0.0f, "dBFS", 1, true },
+    };
+    return specs;
+}
+
+using G = gate::GateSettings;
+
+const std::vector<GateFloatParamSpec>& gateFloatParamSpecs()
+{
+    static const std::vector<GateFloatParamSpec> specs {
+        { ids::gateThreshold, "Gate Threshold", &G::thresholdDb, -80.0f, 0.0f, 0.1f, 0.0f, "dBFS", 1, false },
+        { ids::gateRange, "Gate Range", &G::rangeDb, 0.0f, 80.0f, 0.5f, 0.0f, "dB", 1, false },
+        { ids::gateAttack, "Gate Attack", &G::attackMs, 0.05f, 50.0f, 0.01f, 2.0f, "ms", 2, false },
+        { ids::gateHold, "Gate Hold", &G::holdMs, 0.0f, 2000.0f, 1.0f, 200.0f, "ms", 0, false },
+        { ids::gateRelease, "Gate Release", &G::releaseMs, 5.0f, 4000.0f, 1.0f, 300.0f, "ms", 0, false },
+        { ids::gateRatio, "Gate Ratio", &G::ratio, 1.2f, gate::kHardGateRatio, 0.1f, 4.0f, ":1", 1, true },
+        { ids::gateHysteresis, "Gate Hysteresis", &G::hysteresisDb, 0.0f, 20.0f, 0.1f, 0.0f, "dB", 1, true },
+        { ids::gateScHpf, "Gate Key HPF", &G::sidechainHpfHz, 20.0f, 2000.0f, 1.0f, 200.0f, "Hz", 0, true },
+        { ids::gateScLpf, "Gate Key LPF", &G::sidechainLpfHz, 500.0f, 20000.0f, 10.0f, 4000.0f, "Hz", 0, true },
+        { ids::gateTransientDb, "Gate Transient", &G::transientDb, 1.0f, 24.0f, 0.1f, 0.0f, "dB", 1, true },
+        // Lookahead changes plugin latency: a setting, not automation.
+        { ids::gateLookahead, "Gate Lookahead", &G::lookaheadMs, 0.0f, 5.0f, 0.1f, 0.0f, "ms", 1, true, false },
+    };
+    return specs;
+}
+
+const std::vector<GateBoolParamSpec>& gateBoolParamSpecs()
+{
+    static const std::vector<GateBoolParamSpec> specs {
+        { ids::gateEnabled, "Gate On", &G::enabled, true },
+        { ids::gateRms, "Gate RMS Detector", &G::rmsDetector, true },
+        { ids::gateTransient, "Gate Transient Trigger", &G::transientTrigger, true },
     };
     return specs;
 }
@@ -41,12 +73,13 @@ const std::vector<BoolParamSpec>& boolParamSpecs()
     return specs;
 }
 
-juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
-{
-    juce::AudioProcessorValueTreeState::ParameterLayout layout;
-    const S defaults;
+namespace {
 
-    for (const auto& p : floatParamSpecs())
+template <typename Settings>
+void addFloats(juce::AudioProcessorValueTreeState::ParameterLayout& layout, const std::vector<FloatSpec<Settings>>& specs)
+{
+    const Settings defaults;
+    for (const auto& p : specs)
     {
         juce::NormalisableRange<float> range(p.min, p.max, p.step);
         // Skew only when the centre lies strictly inside the range; 0 means
@@ -56,40 +89,65 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 
         const int decimals = p.decimals;
         const juce::String unit(p.unit);
+        const bool isRatio = juce::String(p.id) == ids::gateRatio;
         auto attributes = juce::AudioParameterFloatAttributes()
                               .withLabel(unit)
-                              .withStringFromValueFunction([decimals, unit](float v, int) {
-                                  return juce::String(v, decimals) + (unit.isEmpty() ? "" : " " + unit);
+                              .withAutomatable(p.automatable)
+                              .withStringFromValueFunction([decimals, unit, isRatio](float v, int) {
+                                  if (isRatio && v >= gate::kHardGateRatio - 0.05f)
+                                      return juce::String("Gate");
+                                  return juce::String(v, decimals) + (unit.isEmpty() ? "" : (unit == ":1" ? unit : " " + unit));
                               })
-                              .withValueFromStringFunction([](const juce::String& t) { return t.getFloatValue(); });
+                              .withValueFromStringFunction([isRatio](const juce::String& t) {
+                                  if (isRatio && t.trim().equalsIgnoreCase("gate"))
+                                      return gate::kHardGateRatio;
+                                  return t.getFloatValue();
+                              });
 
         layout.add(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID { p.id, 1 }, p.name, range,
                                                                defaults.*p.member, attributes));
     }
+}
 
-    for (const auto& b : boolParamSpecs())
-    {
+template <typename Settings>
+void addBools(juce::AudioProcessorValueTreeState::ParameterLayout& layout, const std::vector<BoolSpec<Settings>>& specs)
+{
+    const Settings defaults;
+    for (const auto& b : specs)
         layout.add(std::make_unique<juce::AudioParameterBool>(
             juce::ParameterID { b.id, 1 }, b.name, defaults.*b.member,
             juce::AudioParameterBoolAttributes().withAutomatable(b.automatable)));
+}
+
+template <typename Settings, typename Spec, typename Vec>
+void bind(juce::AudioProcessorValueTreeState& state, const std::vector<Spec>& specs, Vec& out)
+{
+    for (const auto& p : specs)
+    {
+        auto* raw = state.getRawParameterValue(p.id);
+        jassert(raw != nullptr);
+        out.emplace_back(raw, p.member);
     }
+}
+
+} // namespace
+
+juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
+{
+    juce::AudioProcessorValueTreeState::ParameterLayout layout;
+    addFloats(layout, floatParamSpecs());
+    addBools(layout, boolParamSpecs());
+    addFloats(layout, gateFloatParamSpecs());
+    addBools(layout, gateBoolParamSpecs());
     return layout;
 }
 
 ParameterReader::ParameterReader(juce::AudioProcessorValueTreeState& state)
 {
-    for (const auto& p : floatParamSpecs())
-    {
-        auto* raw = state.getRawParameterValue(p.id);
-        jassert(raw != nullptr);
-        floats_.emplace_back(raw, p.member);
-    }
-    for (const auto& b : boolParamSpecs())
-    {
-        auto* raw = state.getRawParameterValue(b.id);
-        jassert(raw != nullptr);
-        bools_.emplace_back(raw, b.member);
-    }
+    bind<S>(state, floatParamSpecs(), floats_);
+    bind<S>(state, boolParamSpecs(), bools_);
+    bind<G>(state, gateFloatParamSpecs(), gateFloats_);
+    bind<G>(state, gateBoolParamSpecs(), gateBools_);
 }
 
 gain::SmartGainSettings ParameterReader::read() const noexcept
@@ -100,6 +158,16 @@ gain::SmartGainSettings ParameterReader::read() const noexcept
     for (const auto& [raw, member] : bools_)
         s.*member = raw->load(std::memory_order_relaxed) >= 0.5f;
     return s; // the engine validates ranges again in setSettings()
+}
+
+gate::GateSettings ParameterReader::readGate() const noexcept
+{
+    G g;
+    for (const auto& [raw, member] : gateFloats_)
+        g.*member = raw->load(std::memory_order_relaxed);
+    for (const auto& [raw, member] : gateBools_)
+        g.*member = raw->load(std::memory_order_relaxed) >= 0.5f;
+    return g;
 }
 
 } // namespace mixcore::plugin

@@ -14,7 +14,13 @@ clipping. **No plugin can repair that**: turn the preamp down.
 Put MixCore first on the vocal channel (before EQ and compression).
 Mono or stereo both work; stereo channels get identical gain.
 
-## 3. Calibrate (once per singer)
+## 3. Choose a preset
+
+Pick the closest preset from the menu at the top (Lead Vocal, Backing Vocal,
+Speech or Drums). Presets set how MixCore behaves; they never change static
+gain. See [presets.md](presets.md) for the full list and how to save your own.
+
+## 4. Calibrate (once per singer)
 
 1. Press **Calibrate** and have the singer perform at their normal level for
    about 6 seconds of actual singing. Pauses are ignored.
@@ -28,7 +34,7 @@ Mono or stereo both work; stereo channels get identical gain.
 
 You can always set **Static gain** by hand instead.
 
-## 4. Let the rider work
+## 5. Let the rider work
 
 * **Target RMS** (default −18 dBFS): the average level to aim for. MixCore
   measures RMS so that a full-scale sine reads −3 dBFS; other meters may show
@@ -41,7 +47,7 @@ You can always set **Static gain** by hand instead.
 * The graph shows the last 20 s of rider gain (amber), peak-guard action (red)
   and vocal activity (green band).
 
-## 5. Peak safety
+## 6. Peak safety
 
 * The rider will never add gain that would push the loudest recent peaks above
   −3 dBFS. When that happens the RIDER chip shows "(held x.x)".
@@ -49,7 +55,14 @@ You can always set **Static gain** by hand instead.
   2 ms latency, which is reported to your DAW. Leave it off for in-ear monitor
   feeds where every millisecond counts; turn it on for recording or streaming.
 
-## 6. Mix Coach
+## 7. Gate (optional)
+
+Open the **Gate** tab. Pick a profile, press **Learn threshold** while the
+source plays with its natural gaps, then **Apply threshold**. Drum presets
+switch the gate on for you; vocal presets leave it off until you learn and
+apply. Details: [presets.md](presets.md#the-gate).
+
+## 8. Mix Coach
 
 The coach panel explains anything worth attention — what was detected, why it
 matters, what to check, what to do, and whether MixCore is doing anything about

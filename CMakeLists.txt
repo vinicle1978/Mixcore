@@ -22,6 +22,8 @@ include(cmake/CompilerWarnings.cmake)
 # --- JUCE-independent engine ---------------------------------------------------
 add_subdirectory(engine)
 add_subdirectory(modules/gain)
+add_subdirectory(modules/gate)
+add_subdirectory(modules/strip)
 
 # --- JUCE plugin / standalone ---------------------------------------------------
 if(MIXCORE_BUILD_PLUGIN)

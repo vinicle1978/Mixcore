@@ -30,8 +30,9 @@ bool SmartGainStage::prepare(double sampleRate, int maxBlockSize, int numChannel
     primaryOut_.prepare(msToSamples(kPrimaryWindowMs, sampleRate_));
     fastLevel_.prepare(msToSamples(kFastWindowMs, sampleRate_));
     fastDetector_.prepare(msToSamples(kFastWindowMs, sampleRate_));
+    detectorHpfHz_ = settings_.detectorHpfHz;
     for (auto& f : detectorHpf_)
-        f.setHighPass(sampleRate_, 100.0, 0.70710678);
+        f.setHighPass(sampleRate_, static_cast<double>(detectorHpfHz_), 0.70710678);
 
     truePeak_.prepare(numChannels_);
     rawPeakHold_.prepare(static_cast<int>(std::lround(1.0 / tickSeconds)));
@@ -121,6 +122,16 @@ void SmartGainStage::setSettings(const SmartGainSettings& incoming) noexcept
     rider_.configure(rc);
 
     activity_.configure(settings_.activityConfirmMs, settings_.phraseHoldMs, settings_.activityMarginDb);
+
+    // Redesign the detector high-pass only when its frequency changes. This is
+    // coefficient maths only (no allocation); filter state is kept, so the
+    // detector level does not jump.
+    if (prepared_ && std::abs(settings_.detectorHpfHz - detectorHpfHz_) > 1.0e-3f)
+    {
+        detectorHpfHz_ = settings_.detectorHpfHz;
+        for (auto& f : detectorHpf_)
+            f.setHighPass(sampleRate_, static_cast<double>(detectorHpfHz_), 0.70710678);
+    }
     guard_.setCeilingDb(settings_.peakGuardCeilingDb);
 }
 

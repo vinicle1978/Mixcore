@@ -62,6 +62,61 @@ with `MIXCORE_UPDATE_REFERENCE=1` and committed deliberately.
 by default, or taken from local checkouts via `MIXCORE_JUCE_PATH` /
 `MIXCORE_CATCH2_PATH`. Pinned tags, no floating branches.
 
+## ADR-011 — Presets never change static gain
+**Decision:** a preset defines behaviour (target, rider, detection, safety).
+Applying any preset, factory or user, keeps the session's static gain and
+bypass. The "modified" marker also ignores static gain.
+**Why:** static gain belongs to the source in the room (singer, mic, preamp)
+and is set by calibration. Switching from "Natural" to "Controlled" mid-
+rehearsal must not suddenly change the vocal level by several dB.
+
+## ADR-012 — Factory presets live in the engine; user presets are files
+**Decision:** factory presets are C++ data in `mixcore::gain` (JUCE-free,
+testable, also exposed as host programs). User presets are XML `.mixpreset`
+files in the per-user application-data folder, written atomically.
+**Why:** factory presets are covered by automated tests; user presets are
+shared across DAWs and the standalone app and are easy to back up and copy.
+
+## ADR-013 — Drum presets: rider off, detector tuned
+**Decision:** kick/snare/toms presets disable the rider and use long phrase
+hold (1.2–1.5 s) plus a source-specific detector high-pass. The detector
+high-pass became a parameter (`detectorHpfHz`, default 100 Hz, unchanged
+behaviour for vocals).
+**Why:** riding drums alters the performance; separated hits otherwise never
+form a continuous "active" stretch, so calibration could not complete (tested).
+
+## ADR-014 — One MixCore plugin, modules in a channel strip
+**Decision:** the gate is a module inside the same MixCore plugin, after the
+Smart Gain Stage (`ChannelStrip`). Latencies add up and are reported as one;
+host bypass bypasses the whole strip as a latency-matched delayed copy.
+**Why:** one insert per channel, shared presets/meters/coach, and the planned
+cross-channel intelligence needs one engine per channel.
+
+## ADR-015 — Gate = gate and expander in one module
+**Decision:** ratio ≥ 20 is a hard gate; lower ratios are downward expansion,
+both capped by range. Gain ramps are linear in dB at range/time.
+**Why:** vocals want gentle expansion, drums want gating; one module keeps one
+UI and one set of tests. Linear-in-dB ramps make "attack 1 ms" literally true.
+
+## ADR-016 — Gate defaults to off, as a gentle vocal expander
+**Decision:** default gate settings are the "Vocal - Gentle Expander" profile
+with `enabled = false`. Vocal channel presets load their gate profile *off*;
+drum presets switch it *on*.
+**Why:** an unfitted gate on a vocal can cut words; one click plus Learn
+threshold turns it on safely. It also makes "first preset == defaults" true, so
+a fresh plugin is not shown as modified (a test caught this).
+
+## ADR-017 — Learn threshold is source-aware
+**Decision:** voices: 40 % between bleed and typical level; drums: 18 dB below
+hit peaks. Drum profile thresholds follow the same rule (−26 for kick/snare).
+**Why:** a test showed the voice rule makes drum gates stay open through the
+drum's own ring when the key filter has made bleed very quiet.
+
+## ADR-018 — 24 dB/oct key filters
+**Decision:** key HPF/LPF are 4th-order Butterworth.
+**Why:** with 12 dB/oct, a 200 Hz snare body passed a 150 Hz kick key almost
+untouched in tests.
+
 ## Open decisions (need product input)
 * Company name, bundle ID and manufacturer code in `plugins/mixcore/CMakeLists.txt`
   are placeholders ("MixCore Audio", `com.mixcoreaudio.mixcore`, `Mxca`).

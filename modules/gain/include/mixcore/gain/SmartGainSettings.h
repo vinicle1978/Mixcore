@@ -33,6 +33,7 @@ struct SmartGainSettings
     float activityConfirmMs = 80.0f;  ///< Signal must stay above threshold this long. [0, 500].
     float phraseHoldMs = 150.0f;      ///< Hold after level drops before "inactive". [0, 2000].
     float activityMarginDb = 10.0f;   ///< Open threshold above estimated noise floor. [3, 30].
+    float detectorHpfHz = 100.0f;     ///< Detector high-pass: ignores rumble below this. [20, 400].
 
     // --- Peak safety ------------------------------------------------------
     float peakWarningDb = -6.0f;      ///< Output sample-peak warning. [-24, 0].

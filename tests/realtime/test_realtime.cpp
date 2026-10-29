@@ -118,3 +118,43 @@ TEST_CASE("Telemetry and calibration control are safe across threads", "[realtim
     CHECK(p999 < 0.25 * budgetMs); // comfortably inside the deadline with a busy reader thread
 #endif
 }
+
+#include "mixcore/strip/ChannelPresets.h"
+
+TEST_CASE("The full channel strip (Smart Gain + Gate) never allocates", "[realtime][allocation][strip]")
+{
+    using namespace mixcore::strip;
+    const double sr = 48000.0;
+    ChannelStrip strip;
+    strip.prepare(sr, 256, 2);
+    auto s = findChannelPreset("Snare Drum")->settings;
+    strip.setSettings(s);
+    strip.reset();
+    strip.gate().learner().requestStart(2.0);
+    strip.gain().calibrator().requestStart(1.0);
+
+    auto mono = compose(sr, { { Segment::Vocal, 3.0, -20.0 }, { Segment::Silence, 1.0 }, { Segment::Vocal, 3.0, -12.0 } }, -60.0);
+    std::vector<float> l = mono, r = mono;
+    mixcore::gate::GateTelemetry gt;
+    SmartGainTelemetry st;
+    std::size_t allocations = 0, frees = 0;
+    int block = 0;
+    for (size_t pos = 0; pos + 256 <= l.size(); pos += 256, ++block)
+    {
+        s.gate.lookaheadMs = (block / 150) % 2 ? 0.0f : 1.5f; // latency changes
+        s.gate.enabled = (block / 97) % 3 != 0;
+        s.gate.sidechainLpfHz = 2000.0f + static_cast<float>(block % 7) * 500.0f; // filter redesigns
+        s.gain.bypass = (block / 211) % 4 == 3;
+        float* ptrs[2] = { l.data() + pos, r.data() + pos };
+        ScopedRealtimeCheck check;
+        strip.setSettings(s);
+        strip.process(ptrs, 2, 256);
+        strip.gate().readTelemetry(gt);
+        strip.gain().readTelemetry(st);
+        allocations += check.counts().allocations;
+        frees += check.counts().deallocations;
+    }
+    CHECK(allocations == 0);
+    CHECK(frees == 0);
+    CHECK(strip.gate().learner().state() == mixcore::gate::LearnState::Ready); // learning ran on the audio thread
+}

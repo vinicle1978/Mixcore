@@ -39,6 +39,7 @@ constexpr FloatField kFloatFields[] = {
     { "activityConfirmMs", &SmartGainSettings::activityConfirmMs, 0.0f, 500.0f },
     { "phraseHoldMs", &SmartGainSettings::phraseHoldMs, 0.0f, 2000.0f },
     { "activityMarginDb", &SmartGainSettings::activityMarginDb, 3.0f, 30.0f },
+    { "detectorHpfHz", &SmartGainSettings::detectorHpfHz, 20.0f, 400.0f },
     { "peakWarningDb", &SmartGainSettings::peakWarningDb, -24.0f, 0.0f },
     { "peakRestrictDb", &SmartGainSettings::peakRestrictDb, -24.0f, 0.0f },
     { "peakGuardCeilingDb", &SmartGainSettings::peakGuardCeilingDb, -24.0f, 0.0f },

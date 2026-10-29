@@ -28,8 +28,10 @@ juce_add_plugin(MixCore
 
 target_sources(MixCore PRIVATE
     Source/Parameters.cpp
+    Source/PresetManager.cpp
     Source/PluginProcessor.cpp
-    Source/PluginEditor.cpp)
+    Source/PluginEditor.cpp
+    Source/ui/GatePanel.cpp)
 
 target_include_directories(MixCore PRIVATE Source)
 
@@ -41,7 +43,7 @@ target_compile_definitions(MixCore PUBLIC
 
 target_link_libraries(MixCore
     PRIVATE
-        mixcore::gain
+        mixcore::strip
         juce::juce_audio_utils
         juce::juce_gui_extra
     PUBLIC

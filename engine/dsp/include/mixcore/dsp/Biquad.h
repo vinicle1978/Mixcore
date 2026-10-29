@@ -23,6 +23,19 @@ public:
         a2_ = (1.0 - alpha) / a0;
     }
 
+    void setLowPass(double sampleRate, double frequencyHz, double q) noexcept
+    {
+        const double w0 = 2.0 * 3.14159265358979323846 * frequencyHz / sampleRate;
+        const double cosw = std::cos(w0);
+        const double alpha = std::sin(w0) / (2.0 * q);
+        const double a0 = 1.0 + alpha;
+        b0_ = ((1.0 - cosw) * 0.5) / a0;
+        b1_ = (1.0 - cosw) / a0;
+        b2_ = b0_;
+        a1_ = (-2.0 * cosw) / a0;
+        a2_ = (1.0 - alpha) / a0;
+    }
+
     void reset() noexcept { z1_ = z2_ = 0.0; }
 
     float process(float x) noexcept

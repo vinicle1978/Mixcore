@@ -93,6 +93,7 @@ private:
     // Detectors & meters
     dsp::RollingPower primaryIn_, fastLevel_, fastDetector_, primaryOut_;
     std::array<dsp::Biquad, kMaxChannels> detectorHpf_ {};
+    float detectorHpfHz_ = 0.0f; // frequency the filters are currently designed for
     dsp::TruePeakEstimator truePeak_;
     dsp::BlockMaxWindow rawPeakHold_; // 1 s of per-tick raw peaks for prediction
     // Published peaks are the max over the last 50 ms so a UI polling at any
