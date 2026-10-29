@@ -57,11 +57,27 @@ for part in "${PARTS[@]}"; do
   codesign --verify --strict --verbose=2 "$stage/$bundle"
   lipo -info "$stage/$bundle/Contents/MacOS/"* || true
 
-  # Never let Installer "relocate" the bundle to an older copy elsewhere.
+  # Component property list written explicitly (not via `pkgbuild --analyze`,
+  # whose output keys vary between macOS versions). Key point: the bundle is
+  # NOT relocatable, so Installer never "moves" the install to an older copy
+  # found elsewhere on the disk.
   plist="$WORK/$suffix.plist"
-  pkgbuild --analyze --root "$stage" "$plist"
-  /usr/libexec/PlistBuddy -c "Set :0:BundleIsRelocatable false" "$plist"
-  /usr/libexec/PlistBuddy -c "Set :0:BundleOverwriteAction upgrade" "$plist"
+  cat >"$plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+  <dict>
+    <key>BundleHasStrictIdentifier</key><true/>
+    <key>BundleIsRelocatable</key><false/>
+    <key>BundleIsVersionChecked</key><false/>
+    <key>BundleOverwriteAction</key><string>upgrade</string>
+    <key>RootRelativeBundlePath</key><string>$bundle</string>
+  </dict>
+</array>
+</plist>
+PLIST
+  plutil -lint "$plist"
 
   scripts_args=()
   if [[ "$suffix" == "au" ]]; then
