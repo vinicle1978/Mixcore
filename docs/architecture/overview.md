@@ -17,11 +17,15 @@ a multi-channel audio engine, channel registry and routing do not exist yet).
 └───────────────▲───────────────────────────────▲────────────────┘
                 │ settings (atomics → struct)    │ telemetry (triple buffer)
 ┌───────────────┴───────────────────────────────┴────────────────┐
-│ modules/strip    (mixcore::strip) ChannelStrip: Gain -> Gate,  │
+│ modules/strip    (mixcore::strip) ChannelStrip:                │
+│                  Gain -> De-bleed -> Gate,                     │
 │                  channel presets, strip-level Mix Coach        │
 ├────────────────────────────────────────────────────────────────┤
 │ modules/gate     (mixcore::gate, no JUCE)                      │
 │   NoiseGate, GateLearner, GateProfiles, GateSettings           │
+├────────────────────────────────────────────────────────────────┤
+│ modules/drum     (mixcore::drum, no JUCE)                      │
+│   DeBleed, DrumProfiles, DrumSettings (replacement: planned)   │
 ├────────────────────────────────────────────────────────────────┤
 │ modules/gain     (mixcore::gain, no JUCE)                      │
 │   SmartGainStage   ── realtime processor                       │
@@ -69,6 +73,8 @@ processing correctly when it is absent. See `decisions.md` ADR-006.
 | Milestone | Location |
 |---|---|
 | Gate/expander (M4) | `modules/gate/` — **done**, wired in via `modules/strip/ChannelStrip` |
+| Drum de-bleed | `modules/drum/` — **done** (before the gate in `ChannelStrip`) |
+| Drum replacement / augmentation | `modules/drum/` — next (own WAV kits, velocity layers) |
 | EQ, compressor, saturation (M4) | `modules/<name>/`, same pattern, appended to `ChannelStrip` |
 | Channel registry, shared analysis, recommendations (M5) | `engine/intelligence/`, `communication/` |
 | Master bus, loudness, tonal analysis (M6) | `modules/master/`, `engine/analysis/` |

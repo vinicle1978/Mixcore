@@ -52,6 +52,7 @@ public:
     /// Single consumer each: only the (one) open editor may call these.
     bool readTelemetry(gain::SmartGainTelemetry& out) noexcept { return strip_.gain().readTelemetry(out); }
     bool readGateTelemetry(gate::GateTelemetry& out) noexcept { return strip_.gate().readTelemetry(out); }
+    bool readDebleedTelemetry(drum::DeBleedTelemetry& out) noexcept { return strip_.debleed().readTelemetry(out); }
 
     // Smart Gain calibration
     void startCalibration(double activeSeconds) noexcept { strip_.gain().calibrator().requestStart(activeSeconds); }
@@ -70,6 +71,12 @@ public:
     void applyGateThreshold(float thresholdDb, float hysteresisDb);
     /// Loads a gate profile only (Smart Gain untouched) and switches the gate on.
     bool loadGateProfile(const juce::String& name);
+
+    // Drum de-bleed
+    /// Forget the learned drum brightness (after changing drum, tuning or mic).
+    void resetDebleedLearning() noexcept { strip_.debleed().resetLearning(); }
+    /// Loads a de-bleed profile only (by id: "snare", "toms", "kick", "off").
+    bool loadDrumProfile(const juce::String& id);
 
     // ---- Channel presets (message thread) ----
     PresetManager& presetManager() noexcept { return presets_; }
@@ -92,6 +99,7 @@ private:
     /// undoable gesture per parameter. Static gain and bypass are untouched.
     void applySettingsToParameters(const strip::ChannelSettings& preset);
     void applyGateToParameters(const gate::GateSettings& g);
+    void applyDrumToParameters(const drum::DrumSettings& d);
     void setCurrentPreset(const juce::String& name, bool isUser, const strip::ChannelSettings& settings);
     void restorePresetReference();
 

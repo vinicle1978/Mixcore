@@ -41,18 +41,29 @@ public:
         g.drawText(caption_, area.removeFromTop(16.0f), juce::Justification::centred);
 
         auto bar = area.reduced(area.getWidth() * 0.28f, 2.0f);
-        g.setColour(theme::panel);
+        g.setColour(juce::Colours::black);
         g.fillRoundedRectangle(bar, 3.0f);
+        g.setColour(theme::gold.withAlpha(0.18f));
+        g.drawRoundedRectangle(bar, 3.0f, 1.0f);
 
         auto yFor = [&](float db) {
             const float n = juce::jlimit(0.0f, 1.0f, (db - kMinDb) / (kMaxDb - kMinDb));
             return bar.getBottom() - n * bar.getHeight();
         };
 
-        // RMS bar: teal below the warning level, amber above it.
+        // RMS bar: metallic gold, with the part above the warning level in red.
         const float top = yFor(rmsDb_);
-        g.setColour(rmsDb_ > warningDb_ ? theme::rider : theme::level);
-        g.fillRoundedRectangle(bar.withTop(top), 2.0f);
+        if (top < bar.getBottom())
+        {
+            g.setGradientFill(theme::goldGradient(bar));
+            g.fillRoundedRectangle(bar.withTop(top), 2.0f);
+            const float warnY = yFor(warningDb_);
+            if (top < warnY)
+            {
+                g.setGradientFill(theme::redGradient(bar.withBottom(warnY)));
+                g.fillRoundedRectangle(bar.withTop(top).withBottom(warnY), 2.0f);
+            }
+        }
 
         // Peak hold.
         g.setColour(peakHoldDb_ > warningDb_ ? theme::safety : theme::text);
@@ -99,8 +110,8 @@ private:
     bool alert_ = false;
 };
 
-/// Scrolling history of rider gain (amber line), guard reduction (red) and
-/// vocal activity (green band), so users can see what the rider did and why.
+/// Scrolling history of rider gain (champagne line), guard reduction (red) and
+/// vocal activity (gold band), so users can see what the rider did and why.
 class GainHistory final : public juce::Component
 {
 public:
@@ -120,8 +131,7 @@ public:
     void paint(juce::Graphics& g) override
     {
         auto area = getLocalBounds().toFloat();
-        g.setColour(theme::panel);
-        g.fillRoundedRectangle(area, 6.0f);
+        theme::fillPanel(g, area, 6.0f, 0.15f);
         auto plot = area.reduced(10.0f, 10.0f).withTrimmedLeft(24.0f);
 
         auto yFor = [&](float db) { return plot.getCentreY() - juce::jlimit(-12.0f, 12.0f, db) / 12.0f * plot.getHeight() * 0.5f; };

@@ -121,7 +121,7 @@ TEST_CASE("Telemetry and calibration control are safe across threads", "[realtim
 
 #include "mixcore/strip/ChannelPresets.h"
 
-TEST_CASE("The full channel strip (Smart Gain + Gate) never allocates", "[realtime][allocation][strip]")
+TEST_CASE("The full channel strip (Smart Gain + De-bleed + Gate) never allocates", "[realtime][allocation][strip]")
 {
     using namespace mixcore::strip;
     const double sr = 48000.0;
@@ -136,6 +136,7 @@ TEST_CASE("The full channel strip (Smart Gain + Gate) never allocates", "[realti
     auto mono = compose(sr, { { Segment::Vocal, 3.0, -20.0 }, { Segment::Silence, 1.0 }, { Segment::Vocal, 3.0, -12.0 } }, -60.0);
     std::vector<float> l = mono, r = mono;
     mixcore::gate::GateTelemetry gt;
+    mixcore::drum::DeBleedTelemetry dt;
     SmartGainTelemetry st;
     std::size_t allocations = 0, frees = 0;
     int block = 0;
@@ -145,11 +146,16 @@ TEST_CASE("The full channel strip (Smart Gain + Gate) never allocates", "[realti
         s.gate.enabled = (block / 97) % 3 != 0;
         s.gate.sidechainLpfHz = 2000.0f + static_cast<float>(block % 7) * 500.0f; // filter redesigns
         s.gain.bypass = (block / 211) % 4 == 3;
+        s.drum.debleedEnabled = (block / 53) % 3 != 1;
+        s.drum.debleedCrossoverHz = 3000.0f + static_cast<float>(block % 5) * 1000.0f; // crossover redesigns
+        if (block == 400)
+            strip.debleed().resetLearning();
         float* ptrs[2] = { l.data() + pos, r.data() + pos };
         ScopedRealtimeCheck check;
         strip.setSettings(s);
         strip.process(ptrs, 2, 256);
         strip.gate().readTelemetry(gt);
+        strip.debleed().readTelemetry(dt);
         strip.gain().readTelemetry(st);
         allocations += check.counts().allocations;
         frees += check.counts().deallocations;

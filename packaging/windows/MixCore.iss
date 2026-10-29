@@ -1,10 +1,10 @@
-; Inno Setup script for the MixCore Windows installer.
+; Inno Setup script for the VineAudio MixCore Windows installer.
 ; Built by .github/workflows/build.yml:
 ;   iscc /DAppVersion=0.1.0 /DSourceDir=<artefacts dir> /DOutputDir=<dir> packaging\windows\MixCore.iss
 ;
 ; Installs:
 ;   MixCore.vst3 -> C:\Program Files\Common Files\VST3\   (standard VST3 location)
-;   MixCore.exe  -> C:\Program Files\MixCore\              (standalone app)
+;   MixCore.exe  -> C:\Program Files\VineAudio\MixCore\             (standalone app)
 
 #ifndef AppVersion
   #define AppVersion "0.0.0"
@@ -18,11 +18,11 @@
 
 [Setup]
 AppId={{6E3B1F0A-8C2D-4F7E-9A51-3D0C4B2E7F19}
-AppName=MixCore
+AppName=VineAudio MixCore
 AppVersion={#AppVersion}
-AppPublisher=MixCore Audio
-DefaultDirName={autopf}\MixCore
-DefaultGroupName=MixCore
+AppPublisher=VineAudio
+DefaultDirName={autopf}\VineAudio\MixCore
+DefaultGroupName=VineAudio
 DisableProgramGroupPage=yes
 OutputDir={#OutputDir}
 OutputBaseFilename=MixCore-{#AppVersion}-Windows-Setup
@@ -32,7 +32,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 WizardStyle=modern
-UninstallDisplayName=MixCore {#AppVersion}
+UninstallDisplayName=VineAudio MixCore {#AppVersion}
 
 [Types]
 Name: "full"; Description: "Full installation"

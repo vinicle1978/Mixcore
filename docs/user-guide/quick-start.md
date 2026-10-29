@@ -41,11 +41,11 @@ You can always set **Static gain** by hand instead.
   values 3 dB different. Treat −18 as a starting point.
 * **Strength** (default 0.5): how much of the difference the rider corrects.
   0.5 corrects about half — natural sounding. 1.0 corrects fully (up to +4/−6 dB).
-* The rider only moves while vocal is detected (green **VOCAL ACTIVE**). In
+* The rider only moves while vocal is detected (gold **VOCAL ACTIVE**). In
   pauses it freezes; after ~2 s of silence any boost slowly returns to 0 dB so
   room noise is not left turned up.
-* The graph shows the last 20 s of rider gain (amber), peak-guard action (red)
-  and vocal activity (green band).
+* The graph shows the last 20 s of rider gain (champagne white), peak-guard action (red)
+  and vocal activity (gold band).
 
 ## 6. Peak safety
 
@@ -62,7 +62,14 @@ source plays with its natural gaps, then **Apply threshold**. Drum presets
 switch the gate on for you; vocal presets leave it off until you learn and
 apply. Details: [presets.md](presets.md#the-gate).
 
-## 8. Mix Coach
+## 8. Drums: de-bleed (optional)
+
+On snare and tom mics, open the **Drums** tab. De-bleed turns down hi-hat and
+cymbal bleed in the high end, even while the gate is open, without touching the
+drum's body and with no added latency. Snare/Toms presets switch it on. See
+[presets.md](presets.md#drum-de-bleed).
+
+## 9. Mix Coach
 
 The coach panel explains anything worth attention — what was detected, why it
 matters, what to check, what to do, and whether MixCore is doing anything about

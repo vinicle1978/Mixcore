@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a macOS installer (.pkg) for MixCore from a finished Release build.
+# Build a macOS installer (.pkg) for VineAudio MixCore from a finished Release build.
 #
 #   packaging/macos/build_pkg.sh <artefacts-dir> <version> <output-dir>
 #
@@ -21,7 +21,7 @@ VERSION="${2:?version}"
 OUT="${3:?output dir}"
 APP_SIGN_ID="${MIXCORE_APP_SIGN_ID:--}"   # "-" = ad-hoc
 PKG_SIGN_ID="${MIXCORE_PKG_SIGN_ID:-}"
-ID_BASE="com.mixcoreaudio.mixcore"
+ID_BASE="com.vineaudio.mixcore"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -105,7 +105,7 @@ done
 # Combine into one installer with a "Customize" option per component.
 productbuild --synthesize "${PKG_ARGS[@]}" "$WORK/distribution.xml"
 # Title shown in the installer window.
-sed -i '' 's#<installer-gui-script minSpecVersion="1">#<installer-gui-script minSpecVersion="1"><title>MixCore '"$VERSION"'</title>#' "$WORK/distribution.xml"
+sed -i '' 's#<installer-gui-script minSpecVersion="1">#<installer-gui-script minSpecVersion="1"><title>VineAudio MixCore '"$VERSION"'</title>#' "$WORK/distribution.xml"
 
 FINAL="$OUT/MixCore-$VERSION-macOS.pkg"
 sign_args=()

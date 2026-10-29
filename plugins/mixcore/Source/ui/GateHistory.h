@@ -1,6 +1,6 @@
 #pragma once
-// Scrolling gate view (last 10 s): detector level (teal), threshold and close
-// threshold (amber lines), gain reduction (red fill from the top) and an
+// Scrolling gate view (last 10 s): detector level (gold), threshold and close
+// threshold (champagne lines), gain reduction (red fill from the top) and an
 // open/hold band along the bottom. Shows at a glance whether hits clear the
 // threshold and whether bleed stays under it.
 
@@ -32,8 +32,7 @@ public:
     void paint(juce::Graphics& g) override
     {
         auto area = getLocalBounds().toFloat();
-        g.setColour(theme::panel);
-        g.fillRoundedRectangle(area, 6.0f);
+        theme::fillPanel(g, area, 6.0f, 0.15f);
         auto plot = area.reduced(10.0f, 10.0f).withTrimmedLeft(24.0f).withTrimmedBottom(6.0f);
 
         auto yFor = [&](float db) {

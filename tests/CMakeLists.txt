@@ -8,8 +8,9 @@ add_executable(mixcore_tests
     dsp/test_smart_gain.cpp
     dsp/test_presets.cpp
     dsp/test_gate.cpp
+    dsp/test_debleed.cpp
     regression/test_regression.cpp)
-target_link_libraries(mixcore_tests PRIVATE mixcore::gain mixcore::gate mixcore::strip Catch2::Catch2WithMain)
+target_link_libraries(mixcore_tests PRIVATE mixcore::gain mixcore::gate mixcore::drum mixcore::strip Catch2::Catch2WithMain)
 target_compile_definitions(mixcore_tests PRIVATE
     MIXCORE_REGRESSION_DIR="${CMAKE_CURRENT_SOURCE_DIR}/regression/reference")
 mixcore_set_warnings(mixcore_tests)

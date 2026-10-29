@@ -1,16 +1,17 @@
 #pragma once
-// User channel presets (Smart Gain + Gate), stored as small XML files:
+// User channel presets (Smart Gain + Gate + Drum de-bleed), stored as small XML files:
 //
-//   macOS:   ~/Library/Application Support/MixCore/Presets/Smart Gain/<name>.mixpreset
-//   Windows: %APPDATA%\MixCore\Presets\Smart Gain\<name>.mixpreset
-//   Linux:   ~/.config/MixCore/Presets/Smart Gain/<name>.mixpreset
+//   macOS:   ~/Library/Application Support/VineAudio/MixCore/Presets/<name>.mixpreset
+//   Windows: %APPDATA%\VineAudio\MixCore\Presets\<name>.mixpreset
+//   Linux:   ~/.config/VineAudio/MixCore/Presets/<name>.mixpreset
 //
 // The same files are shared by every DAW and the standalone app, and can be
 // copied between computers. All calls run on the message thread.
 //
-// File format v2 adds a <Gate> element. v1 files (Smart Gain only, written
-// before the gate existed) load with the gate switched off. The folder keeps
-// its original name so presets saved with earlier versions still appear.
+// File format v2 adds a <Gate> element, v3 a <Drum> element. Older files load
+// with the missing modules switched off (v1: gate off; v1/v2: de-bleed off).
+// Presets saved before the VineAudio rebrand (…/MixCore/Presets/Smart Gain/)
+// are copied into the new folder once, never overwriting, originals kept.
 
 #include "mixcore/strip/ChannelStrip.h"
 
@@ -38,6 +39,10 @@ public:
     explicit PresetManager(juce::File directory);
 
     static juce::File defaultDirectory();
+    /// Pre-rebrand location (…/MixCore/Presets/Smart Gain/).
+    static juce::File legacyDirectory();
+    /// Copies presets from `legacy` that don't exist in `destination`. Returns the count copied.
+    static int importLegacyPresets(const juce::File& legacy, const juce::File& destination);
     const juce::File& directory() const noexcept { return directory_; }
 
     /// All readable user presets, sorted by name. Unreadable files are skipped.

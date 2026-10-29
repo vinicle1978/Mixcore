@@ -5,6 +5,7 @@
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
 
+#include "mixcore/drum/DrumProfiles.h"
 #include "mixcore/gain/SmartGainPresets.h"
 
 #include <catch2/catch_approx.hpp>
@@ -570,4 +571,194 @@ TEST_CASE("Gate page renders", "[plugin][gate][editor]")
             juce::PNGImageFormat().writeImageToStream(image, stream);
         }
     }
+}
+
+// ------------------------------------------------------------------ Drums
+
+TEST_CASE("Every de-bleed setting has a host parameter with matching default and range", "[plugin][drum][params]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    const drum::DrumSettings defaults;
+    for (const auto& spec : drumFloatParamSpecs())
+    {
+        auto* param = dynamic_cast<juce::RangedAudioParameter*>(p.state().getParameter(spec.id));
+        REQUIRE(param != nullptr);
+        INFO(spec.id);
+        CHECK(param->convertFrom0to1(param->getDefaultValue()) == Approx(defaults.*spec.member).margin(spec.step));
+        CHECK(param->getNormalisableRange().start == Approx(spec.min));
+        CHECK(param->getNormalisableRange().end == Approx(spec.max));
+    }
+    for (const auto& spec : drumBoolParamSpecs())
+        CHECK(p.state().getParameter(spec.id) != nullptr);
+    CHECK_FALSE(p.currentChannelSettings().drum.debleedEnabled); // off by default
+    CHECK_FALSE(p.isPresetModified());
+}
+
+TEST_CASE("Drum presets set de-bleed; profiles leave Smart Gain and Gate alone", "[plugin][drum][presets]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    REQUIRE(p.loadFactoryPreset("Snare Drum"));
+    auto s = p.currentChannelSettings();
+    CHECK(s.drum.debleedEnabled);
+    CHECK(s.drum.debleedAmount == Approx(50.0f).margin(1.0));
+    CHECK_FALSE(p.isPresetModified());
+
+    REQUIRE(p.loadFactoryPreset("Toms"));
+    CHECK(p.currentChannelSettings().drum.debleedEnabled);
+    REQUIRE(p.loadFactoryPreset("Kick Drum"));
+    CHECK_FALSE(p.currentChannelSettings().drum.debleedEnabled);
+    REQUIRE(p.loadFactoryPreset("Lead Vocal - Natural"));
+    CHECK_FALSE(p.currentChannelSettings().drum.debleedEnabled);
+
+    const auto before = p.currentChannelSettings();
+    REQUIRE(p.loadDrumProfile("kick"));
+    const auto after = p.currentChannelSettings();
+    CHECK(after.gain == before.gain);
+    CHECK(after.gate == before.gate);
+    CHECK(after.drum.debleedEnabled);
+    CHECK(after.drum.debleedLengthMs == Approx(40.0f).margin(1.0));
+    CHECK(p.isPresetModified());
+    CHECK_FALSE(p.loadDrumProfile("tuba"));
+}
+
+TEST_CASE("De-bleed runs in the plugin with no added latency", "[plugin][drum][audio]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    REQUIRE(p.loadFactoryPreset("Snare Drum"));
+    setParam(p, ids::gateEnabled, 0.0f);
+    setParam(p, ids::gateLookahead, 0.0f); // the snare gate's lookahead is the only latency
+    setParam(p, ids::riderStrength, 0.0f);
+    p.setPlayConfigDetails(1, 1, 48000.0, 256);
+    p.prepareToPlay(48000.0, 256);
+    CHECK(p.getLatencySamples() == 0); // de-bleed adds none
+
+    // Snare-like hits twice a second over steady bright noise (cymbal wash).
+    juce::Random rng(11);
+    juce::AudioBuffer<float> audio(1, 4 * 48000);
+    float hp1 = 0.0f, prev = 0.0f;
+    for (int n = 0; n < audio.getNumSamples(); ++n)
+    {
+        const float t = static_cast<float>(n % 24000) / 48000.0f;
+        const float hit = 0.4f * std::exp(-t / 0.08f)
+                          * (0.6f * std::sin(2.0f * 3.14159f * 200.0f * t) + 0.5f * (rng.nextFloat() * 2.0f - 1.0f));
+        const float white = rng.nextFloat() * 2.0f - 1.0f;
+        hp1 = 0.5f * (hp1 + white - prev); // crude high-pass: bright wash
+        prev = white;
+        audio.setSample(0, n, hit + 0.03f * hp1);
+    }
+    run(p, audio, 256);
+    drum::DeBleedTelemetry t;
+    REQUIRE(p.readDebleedTelemetry(t));
+    CHECK(t.enabled);
+    CHECK(t.hitsSeen >= 4);
+    CHECK(t.reductionDb > 3.0f); // last 10 ms is between hits: wash is being reduced
+}
+
+TEST_CASE("User presets include de-bleed; older presets load with it off", "[plugin][drum][presets]")
+{
+    JuceEnv env;
+    TempPresetDir temp;
+    MixCoreProcessor p;
+    p.setPresetDirectory(temp.dir);
+    p.loadFactoryPreset("Snare Drum");
+    setParam(p, ids::drumDebleedAmount, 70.0f);
+    setParam(p, ids::drumDebleedLength, 220.0f);
+    REQUIRE(p.saveUserPreset("Church Snare").isEmpty());
+    const auto text = temp.dir.getChildFile("Church Snare.mixpreset").loadFileAsString();
+    CHECK(text.contains("version=\"3\""));
+    CHECK(text.contains("<Drum>"));
+
+    MixCoreProcessor q;
+    q.setPresetDirectory(temp.dir);
+    REQUIRE(q.loadUserPreset("Church Snare"));
+    const auto d = q.currentChannelSettings().drum;
+    CHECK(d.debleedEnabled);
+    CHECK(d.debleedAmount == Approx(70.0f).margin(1.0));
+    CHECK(d.debleedLengthMs == Approx(220.0f).margin(1.0));
+    CHECK_FALSE(q.isPresetModified());
+
+    // A v2 file (Smart Gain + Gate, written before de-bleed existed).
+    temp.dir.getChildFile("Old Snare.mixpreset")
+        .replaceWithText("<?xml version=\"1.0\"?><MixCorePreset version=\"2\" module=\"SmartGain\" name=\"Old Snare\">"
+                         "<Settings>targetRmsDb=-20;</Settings><Gate>enabled=1;thresholdDb=-30;</Gate></MixCorePreset>");
+    REQUIRE(q.loadUserPreset("Old Snare"));
+    CHECK_FALSE(q.currentChannelSettings().drum.debleedEnabled);
+    CHECK(q.currentChannelSettings().gate.enabled);
+}
+
+TEST_CASE("Drums page renders", "[plugin][drum][editor]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    p.loadFactoryPreset("Snare Drum");
+    p.setPlayConfigDetails(1, 1, 48000.0, 480);
+    p.prepareToPlay(48000.0, 480);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
+    auto& ed = dynamic_cast<MixCoreEditor&>(*editor);
+    ed.setPage(MixCoreEditor::Page::Drums);
+
+    juce::Random rng(5);
+    juce::AudioBuffer<float> block(1, 480);
+    juce::MidiBuffer midi;
+    float prev = 0.0f, hp = 0.0f;
+    for (int b = 0; b < 300; ++b)
+    {
+        for (int i = 0; i < 480; ++i)
+        {
+            const int n = b * 480 + i;
+            const float t = static_cast<float>(n % 24000) / 48000.0f;
+            const float hit = 0.4f * std::exp(-t / 0.08f)
+                              * (0.6f * std::sin(2.0f * 3.14159f * 200.0f * t) + 0.5f * (rng.nextFloat() * 2.0f - 1.0f));
+            const float white = rng.nextFloat() * 2.0f - 1.0f;
+            hp = 0.5f * (hp + white - prev);
+            prev = white;
+            block.setSample(0, i, hit + 0.03f * hp);
+        }
+        p.processBlock(block, midi);
+        ed.refresh();
+    }
+    for (int k = 0; k < 12; ++k)
+        ed.refresh(); // coach/info text updates at ~3 Hz
+    const auto image = ed.createComponentSnapshot(ed.getLocalBounds(), true, 1.0f);
+    CHECK(image.getWidth() == ed.getWidth());
+    if (const char* outDir = std::getenv("MIXCORE_SNAPSHOT_DIR"))
+    {
+        juce::File f(juce::String(outDir) + "/mixcore-drums.png");
+        f.deleteFile();
+        juce::FileOutputStream stream(f);
+        juce::PNGImageFormat().writeImageToStream(image, stream);
+    }
+}
+
+TEST_CASE("Pre-rebrand presets are imported once, never overwriting", "[plugin][presets][brand]")
+{
+    JuceEnv env;
+    TempPresetDir legacy;
+    legacy.dir.createDirectory(); // before `current` picks its (distinct) non-existent name
+    TempPresetDir current;
+    current.dir.createDirectory();
+    PresetManager oldManager(legacy.dir);
+    REQUIRE(oldManager.save("Sunday Lead", {}).isEmpty());
+    REQUIRE(oldManager.save("Clash", {}).isEmpty());
+    current.dir.getChildFile("Clash.mixpreset").replaceWithText("mine");
+
+    CHECK(PresetManager::importLegacyPresets(legacy.dir, current.dir) == 1);
+    CHECK(PresetManager(current.dir).exists("Sunday Lead"));
+    CHECK(current.dir.getChildFile("Clash.mixpreset").loadFileAsString() == "mine"); // not overwritten
+    CHECK(legacy.dir.getChildFile("Sunday Lead.mixpreset").existsAsFile());             // original kept
+    CHECK(PresetManager::importLegacyPresets(legacy.dir, current.dir) == 0);            // idempotent
+    CHECK(PresetManager::defaultDirectory().getFullPathName().contains("VineAudio"));
+}
+
+TEST_CASE("Plugin reports the VineAudio brand", "[plugin][brand]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    CHECK(juce::String(JucePlugin_Manufacturer) == "VineAudio");
+    CHECK(juce::String(JucePlugin_Name) == "MixCore");
+    CHECK(theme::logoImage().isValid());
+    CHECK(theme::emblemImage().isValid());
 }

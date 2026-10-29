@@ -117,9 +117,53 @@ drum's own ring when the key filter has made bleed very quiet.
 **Why:** with 12 dB/oct, a 200 Hz snare body passed a 150 Hz kick key almost
 untouched in tests.
 
+## ADR-019 — De-bleed is a learned, single-band, zero-latency process
+**Decision:** split at a crossover (LR4); keep the body untouched; reduce the
+high band to what the drum's learned high/body ratio explains (ceiling) and to
+its share against an estimated steady bleed (D/√(D²+B²)). No lookahead, no FFT.
+**Why:** live use first (user choice "both, live-safe first"): zero latency and
+a few operations per sample. A spectral/lookahead studio mode can be added
+later. The cost: during the first milliseconds of a hit, cymbal and drum are not
+separated (documented).
+
+## ADR-020 — De-bleed sits before the gate
+**Decision:** Smart Gain → De-bleed → Gate.
+**Why:** de-bleed's in-hit reduction depends on measuring the raw bleed level
+between hits; after a gate that level is gone. The gate also sees less cymbal
+wash, so it chatters less.
+
+## ADR-021 — Learning starts permissive, moves down fast, up slowly, rejects outliers
+**Decision:** k starts at +10 dB (≈ no processing), −40 %/+10 % per hit, ignores
+hits > 6 dB brighter than learned, subtracts the known steady bleed before
+measuring, and only accepts hits within 12 dB of the loudest recent hit.
+**Why:** tests showed (1) a ringing crash leaking into the body band was being
+detected as "hits" and drove k to its maximum, and (2) with only asymmetric
+rates, k crept upward over consecutive hits under a sustained crash, so
+reduction weakened hit by hit. The outlier rule and bleed subtraction fixed both
+(learned ratio now moves 0.5 dB under crashes on every other hit).
+
+## ADR-022 — Drum module now; drum replacement next, in the same module
+**Decision:** `modules/drum` holds de-bleed (phase 1) and will hold replacement
+(phase 2: own WAV kits + an original starter kit, velocity layers, round robin,
+attack/decay/pitch, mix with original; live-safe ≤ 3 ms, studio mode with more
+lookahead). User preset files gained a `<Drum>` element (v3).
+**Why:** user's order: "de-bleed first, then replacement". One module keeps one
+Drums page and one settings schema.
+
+## ADR-023 — Brand: VineAudio (maker) → MixCore (product)
+**Decision:** company "VineAudio", bundle ID `com.vineaudio.mixcore`,
+AU manufacturer code `Vnau` (plugin code `Mxcr` unchanged). Plugin, binaries and
+installer file names stay "MixCore". Presets move to
+`…/VineAudio/MixCore/Presets/`; presets in the old `…/MixCore/Presets/Smart Gain/`
+folder are copied over automatically the first time (originals left in place).
+UI palette: black, white, VineAudio gold (sampled from the logo: #CF9156 mean,
+#FDDE9F highlight, #72401D shadow) and red, with gold gradients; red stays
+reserved for problems and safety intervention.
+**Why:** user's brand decision before any public release. Changing the
+manufacturer code makes DAWs treat it as a new plugin, so sessions made with
+the pre-rebrand test builds will show MixCore as missing; re-insert it.
+
 ## Open decisions (need product input)
-* Company name, bundle ID and manufacturer code in `plugins/mixcore/CMakeLists.txt`
-  are placeholders ("MixCore Audio", `com.mixcoreaudio.mixcore`, `Mxca`).
-  They must be final before the first public release — changing them later
-  breaks saved sessions in DAWs.
+* Plugin code `Mxcr` and the Windows installer AppId are kept; confirm they are
+  final before the first public release.
 * JUCE licensing for commercial release (see `THIRD_PARTY_LICENSES.md`).

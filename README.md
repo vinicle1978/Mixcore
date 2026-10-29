@@ -1,4 +1,8 @@
-# MixCore — intelligent live mixing & streaming engine
+# VineAudio MixCore — intelligent live mixing & streaming engine
+
+![VineAudio](plugins/mixcore/Resources/vineaudio_logo.png)
+
+MixCore is made by **VineAudio**. In your DAW it appears as **VineAudio → MixCore**.
 
 MixCore is the shared processing and intelligence engine for a live-mixing and
 live-streaming platform (churches, bands, venues, streams). It is being built
@@ -29,11 +33,17 @@ Stage**.
   (vocal gentle/tight, backing vocal, speech, kick, snare, toms, overheads,
   instrument). Channel presets now set Smart Gain + Gate together.
   [Gate spec](docs/dsp/gate.md)
+* **Drum de-bleed** (new, Drums tab): reduces hi-hat and cymbal bleed in drum
+  close mics *during* hits as well as between them. The drum body below the
+  crossover is never touched; the drum's own brightness is learned from its
+  hits. Zero latency (live-safe). Snare/Toms presets switch it on.
+  [De-bleed spec](docs/dsp/debleed.md). Drum replacement (own WAV kits,
+  velocity, attack/decay) is the next phase.
 * **MixCore plugin + standalone app** (JUCE 8): VST3, AU (macOS), Standalone,
   with host parameters, state save/restore, host bypass, latency reporting and
   an editor showing live meters, gain chain, 20 s rider history, calibration
   and Mix Coach.
-* **74 automated tests** (unit, integration, regression, realtime, performance,
+* **93 automated tests** (unit, integration, regression, realtime, performance,
   plugin) — all passing on Linux; engine also passes under Clang/libc++
   `-Werror`, ASan/UBSan and TSan. Details: [`docs/testing/test-plan.md`](docs/testing/test-plan.md).
 
@@ -107,7 +117,8 @@ engine/core        units (DbMath), lock-free TripleBuffer           (header-only
 engine/dsp         RMS window, true peak, lookahead guard, biquad
 modules/gain       Smart Gain Stage, rider, activity, calibration, coach
 modules/gate       gate/expander, key filters, threshold learning, profiles
-modules/strip      channel strip (Smart Gain -> Gate), channel presets, strip coach
+modules/drum       drum de-bleed (replacement planned), drum profiles
+modules/strip      channel strip (Smart Gain -> De-bleed -> Gate), channel presets, strip coach
 plugins/mixcore    JUCE plugin/standalone adapter and editor
 tests/             unit, integration, regression, realtime, performance, plugin
 docs/              architecture, DSP spec, testing, user guide
@@ -117,7 +128,7 @@ docs/              architecture, DSP spec, testing, user guide
 
 * [Architecture overview](docs/architecture/overview.md) · [Decisions](docs/architecture/decisions.md) ·
   [Realtime safety](docs/architecture/realtime-safety.md) · [Routing](docs/architecture/routing.md)
-* [Smart Gain Stage DSP spec](docs/dsp/smart-gain-stage.md) · [Gate DSP spec](docs/dsp/gate.md)
+* [Smart Gain Stage DSP spec](docs/dsp/smart-gain-stage.md) · [Gate DSP spec](docs/dsp/gate.md) · [De-bleed DSP spec](docs/dsp/debleed.md)
 * [Test plan & results](docs/testing/test-plan.md) · [Listening tests](docs/testing/listening-tests.md)
 * [User quick start](docs/user-guide/quick-start.md) · [Installing on Mac / testing in Logic](docs/user-guide/installing-on-mac.md)
 * [Third-party licences](THIRD_PARTY_LICENSES.md)
@@ -127,7 +138,7 @@ docs/              architecture, DSP spec, testing, user guide
 1. ~~Repository & architecture~~ ✔
 2. Audio foundation: multi-channel engine, channel state, routing — *partly (meters, realtime checks)*
 3. ~~Smart Gain Stage~~ ✔ (pending listening tests)
-4. ~~Gate/expander~~ ✔ (pending listening tests), parametric EQ, compressor, saturation
+4. ~~Gate/expander~~ ✔, ~~drum de-bleed~~ ✔ (pending listening tests), drum replacement, parametric EQ, compressor, saturation
 5. Channel registry, shared analysis, recommendations (preview/apply/undo)
 6. Master bus, loudness & true peak, tonal analysis, LiveMixing / LiveStreaming
 7. Standalone live mixer: strips, buses, scenes, Mix Coach, setup wizard

@@ -35,9 +35,23 @@ whether phrase starts sound late, or whether the gain moves are noticeable.
 | 12 | Peak guard on, hot singer | Guard transparent? Any audible limiting? | — | |
 | 13 | Toggling bypass and peak guard during playback | Clicks or level jumps? | — | |
 
+### Drum de-bleed (real multitrack drums; snare and tom close mics)
+
+| # | Material | Listen for | Result | Notes |
+|---|---|---|---|---|
+| D1 | Snare, groove with hi-hat 8ths | Hi-hat reduced between hits; snare crack and wires intact (A/B with On/Off) | — | |
+| D2 | Snare, chorus with crash on 1 | Crash under the snare tail reduced; any "dull" or "chopped" wires? | — | |
+| D3 | Snare ghost notes | Ghosts keep their top (they are quiet hits) | — | |
+| D4 | Rim shots / cross-stick | Not dulled (raise Tolerance if so) | — | |
+| D5 | Toms: fills with ride/crash | Tom ring natural; cymbal wash lower | — | |
+| D6 | Kick, Kick profile | Beater click kept, snare/cymbal crack reduced | — | |
+| D7 | Toggle de-bleed and Relearn during playback | Clicks? Over-processing right after Relearn? | — | |
+| D8 | Snare mic summed with overheads | Phase/tone change in the blend vs. Off (LR4 all-pass) | — | |
+
 ## Parameters to tune from these results
 
 Rider attack/release, max rate, deadband, strength default, activity margin,
-phrase hold, idle release delay/rate, detector high-pass frequency. Record any
+phrase hold, idle release delay/rate, detector high-pass frequency. De-bleed:
+profile crossover, length and tolerance defaults; learning rates. Record any
 default change in `docs/architecture/decisions.md` and update the regression
 reference deliberately.

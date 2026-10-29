@@ -1,7 +1,10 @@
 #include "mixcore/strip/ChannelPresets.h"
 
 #include "mixcore/gain/SmartGainPresets.h"
+#include "mixcore/drum/DrumProfiles.h"
 #include "mixcore/gate/GateProfiles.h"
+
+#include <cmath>
 
 #include <utility>
 
@@ -23,6 +26,12 @@ const std::pair<const char*, std::pair<const char*, bool>> kGateFor[] = {
     { "Kick Drum", { "Kick", true } },
     { "Snare Drum", { "Snare", true } },
     { "Toms", { "Toms", true } },
+};
+
+// Smart Gain preset -> de-bleed profile (on). Others get de-bleed off.
+const std::pair<const char*, const char*> kDebleedFor[] = {
+    { "Snare Drum", "snare" },
+    { "Toms", "toms" },
 };
 
 std::vector<ChannelPreset> build()
@@ -49,6 +58,13 @@ std::vector<ChannelPreset> build()
                 }
             }
         }
+        for (const auto& [gainName, profileId] : kDebleedFor)
+            if (g.name == gainName)
+                if (const auto* profile = drum::findDrumProfile(profileId))
+                {
+                    p.settings.drum = profile->settings;
+                    p.description += " De-bleed: on (" + std::string(profile->name) + ").";
+                }
         p.settings.validate();
         out.push_back(std::move(p));
     }
@@ -71,11 +87,20 @@ const ChannelPreset* findChannelPreset(const std::string& name)
     return nullptr;
 }
 
+bool drumSettingsMatch(const drum::DrumSettings& a, const drum::DrumSettings& b, float tolerance)
+{
+    const auto near = [tolerance](float x, float y) { return std::abs(x - y) <= tolerance * std::max(1.0f, std::abs(y)); };
+    return a.debleedEnabled == b.debleedEnabled && near(a.debleedAmount, b.debleedAmount)
+           && near(a.debleedCrossoverHz, b.debleedCrossoverHz) && near(a.debleedLengthMs, b.debleedLengthMs)
+           && near(a.debleedToleranceDb, b.debleedToleranceDb);
+}
+
 ChannelSettings applyChannelPreset(const ChannelSettings& current, const ChannelSettings& preset)
 {
     ChannelSettings s;
     s.gain = gain::applyPreset(current.gain, preset.gain);
     s.gate = preset.gate;
+    s.drum = preset.drum;
     s.validate();
     return s;
 }
@@ -83,7 +108,8 @@ ChannelSettings applyChannelPreset(const ChannelSettings& current, const Channel
 bool matchesChannelPreset(const ChannelSettings& current, const ChannelSettings& preset, float tolerance)
 {
     return gain::matchesPreset(current.gain, preset.gain, tolerance)
-           && gate::gateSettingsMatch(current.gate, preset.gate, tolerance);
+           && gate::gateSettingsMatch(current.gate, preset.gate, tolerance)
+           && drumSettingsMatch(current.drum, preset.drum, tolerance);
 }
 
 std::string serialiseGate(const ChannelSettings& s) { return s.gate.serialise(); }

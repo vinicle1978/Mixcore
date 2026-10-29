@@ -72,8 +72,8 @@ Open the **Gate** tab (or click the GATE box in the signal chain).
    (move the mic, or leave the gate off).
 4. Press **Apply threshold**. This sets threshold and hysteresis and switches
    the gate on. Undo works like any parameter change.
-5. Watch the graph: the teal line (what the gate hears) should jump above the
-   amber threshold on every hit or phrase and fall below the dashed line
+5. Watch the graph: the gold line (what the gate hears) should jump above the
+   white threshold on every hit or phrase and fall below the dashed line
    between them. Red shows how much the gate is turning the mic down.
 
 | Want | Use |
@@ -87,6 +87,31 @@ Open the **Gate** tab (or click the GATE box in the signal chain).
 
 Drum profiles use 1.5 ms lookahead so the attack of each hit is kept; this adds
 1.5 ms latency (your DAW compensates; on a live console path it's 1.5 ms).
+
+## Drum de-bleed
+
+Open the **Drums** tab (or click the DE-BLEED box in the signal chain).
+The **Snare Drum** and **Toms** presets switch it on; **Kick Drum** leaves it off.
+
+1. Play a few normal hits. MixCore learns how bright this drum is (the readout
+   shows "Drum brightness ... | n hits"). Until then it does almost nothing.
+2. Watch the graph: gold = drum body, white = high band, red = how much high
+   band is being turned down. Red should appear between hits and under the
+   drum's tail when cymbals ring, and stay small on the hits themselves.
+3. Adjust by ear:
+
+| Want | Do |
+|---|---|
+| More cymbal removed | raise **Amount**, or shorten **Length**, or lower **Tolerance** |
+| Snare wires / tom ring sound cut short | lengthen **Length** |
+| Bright rim shots sound dull | raise **Tolerance** |
+| Hi-hat still in the snare's "crack" | lower **Crossover** a little |
+| Changed the drum, tuning or mic | press **Relearn drum** |
+
+De-bleed adds no latency. It works best together with the gate: the gate
+handles silence between hits and low-frequency bleed (kick in the snare mic);
+de-bleed handles cymbals while the gate is open. Details and limits:
+[`docs/dsp/debleed.md`](../dsp/debleed.md).
 
 ## Your own presets
 
@@ -105,12 +130,15 @@ up or copy them to another computer:
 
 | System | Folder |
 |---|---|
-| macOS | `~/Library/Application Support/MixCore/Presets/Smart Gain/` |
-| Windows | `%APPDATA%\MixCore\Presets\Smart Gain\` |
-| Linux | `~/.config/MixCore/Presets/Smart Gain/` |
+| macOS | `~/Library/Application Support/VineAudio/MixCore/Presets/` |
+| Windows | `%APPDATA%\VineAudio\MixCore\Presets\` |
+| Linux | `~/.config/VineAudio/MixCore/Presets/` |
 
-User presets save the gate too. Presets saved before the gate existed still
-load, with the gate off.
+Presets you saved before the VineAudio rebrand (in `…/MixCore/Presets/Smart Gain/`)
+are copied into the new folder automatically the first time MixCore opens.
+
+User presets save the gate and de-bleed too. Presets saved by earlier versions
+still load, with the newer modules off.
 
 A user preset also records the static gain at the time you saved it (for
 reference), but loading it does not change static gain, the same as factory presets.

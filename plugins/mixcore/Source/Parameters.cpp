@@ -73,6 +73,27 @@ const std::vector<BoolParamSpec>& boolParamSpecs()
     return specs;
 }
 
+using D = drum::DrumSettings;
+
+const std::vector<DrumFloatParamSpec>& drumFloatParamSpecs()
+{
+    static const std::vector<DrumFloatParamSpec> specs {
+        { ids::drumDebleedAmount, "De-bleed Amount", &D::debleedAmount, 0.0f, 100.0f, 1.0f, 0.0f, "%", 0, false },
+        { ids::drumDebleedCrossover, "De-bleed Crossover", &D::debleedCrossoverHz, 1000.0f, 12000.0f, 10.0f, 4000.0f, "Hz", 0, false },
+        { ids::drumDebleedLength, "De-bleed Length", &D::debleedLengthMs, 10.0f, 1000.0f, 1.0f, 150.0f, "ms", 0, false },
+        { ids::drumDebleedTolerance, "De-bleed Tolerance", &D::debleedToleranceDb, 0.0f, 12.0f, 0.1f, 0.0f, "dB", 1, false },
+    };
+    return specs;
+}
+
+const std::vector<DrumBoolParamSpec>& drumBoolParamSpecs()
+{
+    static const std::vector<DrumBoolParamSpec> specs {
+        { ids::drumDebleed, "De-bleed On", &D::debleedEnabled, true },
+    };
+    return specs;
+}
+
 namespace {
 
 template <typename Settings>
@@ -139,6 +160,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     addBools(layout, boolParamSpecs());
     addFloats(layout, gateFloatParamSpecs());
     addBools(layout, gateBoolParamSpecs());
+    addFloats(layout, drumFloatParamSpecs());
+    addBools(layout, drumBoolParamSpecs());
     return layout;
 }
 
@@ -148,6 +171,8 @@ ParameterReader::ParameterReader(juce::AudioProcessorValueTreeState& state)
     bind<S>(state, boolParamSpecs(), bools_);
     bind<G>(state, gateFloatParamSpecs(), gateFloats_);
     bind<G>(state, gateBoolParamSpecs(), gateBools_);
+    bind<D>(state, drumFloatParamSpecs(), drumFloats_);
+    bind<D>(state, drumBoolParamSpecs(), drumBools_);
 }
 
 gain::SmartGainSettings ParameterReader::read() const noexcept
@@ -168,6 +193,20 @@ gate::GateSettings ParameterReader::readGate() const noexcept
     for (const auto& [raw, member] : gateBools_)
         g.*member = raw->load(std::memory_order_relaxed) >= 0.5f;
     return g;
+}
+
+} // namespace mixcore::plugin
+
+namespace mixcore::plugin {
+
+drum::DrumSettings ParameterReader::readDrum() const noexcept
+{
+    D d;
+    for (const auto& [raw, member] : drumFloats_)
+        d.*member = raw->load(std::memory_order_relaxed);
+    for (const auto& [raw, member] : drumBools_)
+        d.*member = raw->load(std::memory_order_relaxed) >= 0.5f;
+    return d;
 }
 
 } // namespace mixcore::plugin

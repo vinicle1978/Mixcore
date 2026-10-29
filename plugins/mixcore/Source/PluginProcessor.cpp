@@ -2,6 +2,7 @@
 
 #include "PluginEditor.h"
 
+#include "mixcore/drum/DrumProfiles.h"
 #include "mixcore/gate/GateProfiles.h"
 #include "mixcore/strip/ChannelPresets.h"
 
@@ -119,6 +120,24 @@ bool MixCoreProcessor::loadGateProfile(const juce::String& name)
     return true;
 }
 
+void MixCoreProcessor::applyDrumToParameters(const drum::DrumSettings& d)
+{
+    for (const auto& spec : drumFloatParamSpecs())
+        setParam(spec.id, d.*spec.member);
+    for (const auto& spec : drumBoolParamSpecs())
+        setParam(spec.id, d.*spec.member ? 1.0f : 0.0f);
+}
+
+bool MixCoreProcessor::loadDrumProfile(const juce::String& id)
+{
+    const auto* profile = drum::findDrumProfile(id.toStdString());
+    if (profile == nullptr)
+        return false;
+    applyDrumToParameters(profile->settings);
+    resetDebleedLearning(); // a new drum/profile: learn its brightness afresh
+    return true;
+}
+
 // ---------------------------------------------------------------- Presets
 
 int MixCoreProcessor::getNumPrograms() { return static_cast<int>(strip::channelPresets().size()); }
@@ -160,6 +179,7 @@ void MixCoreProcessor::applySettingsToParameters(const strip::ChannelSettings& p
         if (spec.member != &gain::SmartGainSettings::bypass)
             setParam(spec.id, target.gain.*spec.member ? 1.0f : 0.0f);
     applyGateToParameters(target.gate);
+    applyDrumToParameters(target.drum);
 }
 
 void MixCoreProcessor::setCurrentPreset(const juce::String& name, bool isUser, const strip::ChannelSettings& settings)

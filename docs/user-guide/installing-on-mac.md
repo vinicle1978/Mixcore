@@ -1,4 +1,4 @@
-# Installing MixCore on a Mac and testing it in Logic Pro
+# Installing VineAudio MixCore on a Mac and testing it in Logic Pro
 
 Logic Pro only loads **Audio Unit (AU)** plugins. The macOS installer contains
 the AU (for Logic and GarageBand), the VST3 (for other DAWs) and the standalone
@@ -38,9 +38,9 @@ Installed to:
 
 1. Open Logic. It scans new plugins on launch; MixCore should pass.
    If it does not appear: **Logic Pro → Settings → Plug-in Manager**, find
-   **MixCore Audio → MixCore**, select it and click **Reset & Rescan Selection**.
+   **VineAudio → MixCore**, select it and click **Reset & Rescan Selection**.
 2. On an audio track with a vocal: click an empty **Audio FX** slot →
-   **Audio Units → MixCore Audio → MixCore**. Mono and stereo tracks both work.
+   **Audio Units → VineAudio → MixCore**. Mono and stereo tracks both work.
 3. Put it **first** in the chain, before EQ and compression.
 
 ## 4. Test checklist
@@ -49,8 +49,8 @@ Installed to:
 * **Calibrate:** press Calibrate during a sung passage, wait for the result,
   press **Apply suggestion**. The Static gain knob should move, and
   **Cmd-Z** in Logic should undo it.
-* **Rider:** the amber line in the graph moves slowly up on quiet phrases and
-  down on loud ones, and stays flat in pauses (activity band not green).
+* **Rider:** the champagne-white line in the graph moves slowly up on quiet phrases and
+  down on loud ones, and stays flat in pauses (activity band not gold).
 * **Automation:** in Logic, show automation for the track and pick
   MixCore → Static Gain / Target RMS. Write a move and play it back.
 * **Save/restore:** change settings, save the project, quit, reopen. Settings
@@ -68,7 +68,7 @@ anything that sounds wrong, with timestamps.
 
 * **MixCore missing in Logic:** Plug-in Manager → Reset & Rescan. If it shows
   "failed validation", run in Terminal and send the output:
-  `auval -strict -v aufx Mxcr Mxca`
+  `auval -strict -v aufx Mxcr Vnau`
 * **"MixCore is damaged and can't be opened"** (only if you copied bundles by
   hand from a zip instead of using the .pkg):
   `sudo xattr -dr com.apple.quarantine /Library/Audio/Plug-Ins/Components/MixCore.component`

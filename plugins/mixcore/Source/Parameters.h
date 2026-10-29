@@ -1,6 +1,7 @@
 #pragma once
 // Host-visible parameters for MixCore, mapped 1:1 onto the engine settings
-// (mixcore::gain::SmartGainSettings and mixcore::gate::GateSettings). Ranges
+// (mixcore::gain::SmartGainSettings, mixcore::gate::GateSettings and
+// mixcore::drum::DrumSettings). Ranges
 // and defaults come from the engine schema so there is a single source of
 // truth; tests assert they match.
 
@@ -51,6 +52,12 @@ inline constexpr const char* gateRms = "gateRms";
 inline constexpr const char* gateTransient = "gateTransient";
 inline constexpr const char* gateTransientDb = "gateTransientDb";
 inline constexpr const char* gateLookahead = "gateLookahead";
+
+inline constexpr const char* drumDebleed = "drumDebleed";
+inline constexpr const char* drumDebleedAmount = "drumDebleedAmount";
+inline constexpr const char* drumDebleedCrossover = "drumDebleedCrossover";
+inline constexpr const char* drumDebleedLength = "drumDebleedLength";
+inline constexpr const char* drumDebleedTolerance = "drumDebleedTolerance";
 } // namespace ids
 
 template <typename Settings>
@@ -82,11 +89,15 @@ using FloatParamSpec = FloatSpec<gain::SmartGainSettings>;
 using BoolParamSpec = BoolSpec<gain::SmartGainSettings>;
 using GateFloatParamSpec = FloatSpec<gate::GateSettings>;
 using GateBoolParamSpec = BoolSpec<gate::GateSettings>;
+using DrumFloatParamSpec = FloatSpec<drum::DrumSettings>;
+using DrumBoolParamSpec = BoolSpec<drum::DrumSettings>;
 
 const std::vector<FloatParamSpec>& floatParamSpecs();
 const std::vector<BoolParamSpec>& boolParamSpecs();
 const std::vector<GateFloatParamSpec>& gateFloatParamSpecs();
 const std::vector<GateBoolParamSpec>& gateBoolParamSpecs();
+const std::vector<DrumFloatParamSpec>& drumFloatParamSpecs();
+const std::vector<DrumBoolParamSpec>& drumBoolParamSpecs();
 
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
@@ -98,13 +109,16 @@ public:
     explicit ParameterReader(juce::AudioProcessorValueTreeState& state);
     gain::SmartGainSettings read() const noexcept;
     gate::GateSettings readGate() const noexcept;
-    strip::ChannelSettings readChannel() const noexcept { return { read(), readGate() }; }
+    drum::DrumSettings readDrum() const noexcept;
+    strip::ChannelSettings readChannel() const noexcept { return { read(), readGate(), readDrum() }; }
 
 private:
     std::vector<std::pair<std::atomic<float>*, float gain::SmartGainSettings::*>> floats_;
     std::vector<std::pair<std::atomic<float>*, bool gain::SmartGainSettings::*>> bools_;
     std::vector<std::pair<std::atomic<float>*, float gate::GateSettings::*>> gateFloats_;
     std::vector<std::pair<std::atomic<float>*, bool gate::GateSettings::*>> gateBools_;
+    std::vector<std::pair<std::atomic<float>*, float drum::DrumSettings::*>> drumFloats_;
+    std::vector<std::pair<std::atomic<float>*, bool drum::DrumSettings::*>> drumBools_;
 };
 
 } // namespace mixcore::plugin

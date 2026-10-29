@@ -1,5 +1,8 @@
 #pragma once
-// Channel presets = Smart Gain preset + gate profile.
+// Channel presets = Smart Gain preset + gate profile + de-bleed profile.
+//
+// Snare and Toms presets switch de-bleed on (Amount 50 %); every other preset
+// leaves it off.
 //
 // Drum presets switch the gate ON (the main reason to use them). Vocal and
 // speech presets load the matching gate profile but leave the gate OFF: a gate
@@ -30,6 +33,8 @@ ChannelSettings applyChannelPreset(const ChannelSettings& current, const Channel
 
 /// True when `current` matches `preset` on every preset-controlled field.
 bool matchesChannelPreset(const ChannelSettings& current, const ChannelSettings& preset, float tolerance = 1.0e-3f);
+
+bool drumSettingsMatch(const drum::DrumSettings& a, const drum::DrumSettings& b, float tolerance = 1.0e-3f);
 
 /// Text form used by user preset files and tests.
 std::string serialiseGate(const ChannelSettings& s);

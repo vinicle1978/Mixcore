@@ -15,7 +15,7 @@ Timing-sensitive suites (`realtime`, `performance`) are marked `RUN_SERIAL`.
 
 * **Date:** 2026-10-29 · **Commit:** see `git log` · **Machine:** Linux x86_64 dev
   container, 2 vCPU Intel Xeon @ 2.10 GHz, GCC 13.3, JUCE 8.0.4, Catch2 3.7.1.
-* **Result: 74 / 74 CTest tests passed** (after the gate; previously 48 / 48 with presets, 37 / 37 before) (three consecutive parallel runs), and
+* **Result: 93 / 93 CTest tests passed** (after the VineAudio rebrand; 90 / 90 after drum de-bleed; 74 / 74 after the gate, 48 / 48 with presets, 37 / 37 before) (three consecutive parallel runs), and
   again from a **fresh clone configured exactly like the Linux CI job**
   (JUCE/Catch2 fetched from GitHub, engine `-Werror`).
 * Engine + tests also built with **Clang 18 / libc++ with `-Werror`**: all
@@ -88,6 +88,32 @@ Timing-sensitive suites (`realtime`, `performance`) are marked `RUN_SERIAL`.
 | Strip | latency = guard + lookahead; strip bypass = delayed copy; channel presets; coach (chatter, stuck closed) | pass |
 | Realtime | full strip incl. learning, filter redesigns and latency changes: 0 allocations | pass |
 | Plugin | gate params match engine; audio gated at −40 dB in plugin; 72-sample latency; channel presets set the gate, profiles leave Smart Gain alone; learn → apply end to end; user presets include gate; old v1 preset loads with gate off; Gate page renders | pass |
+
+## Drum de-bleed tests
+
+Synthetic snare (200 Hz body + noise wires, 90 ms decay) and cymbal (noise,
+8th-order high-pass at 7 kHz). Measurements use an independent 8th-order
+6.5 kHz high-pass.
+
+| Requirement | Test | Result (this run) |
+|---|---|---|
+| Settings | validate (clamps, NaN → default), serialise round-trip, garbage → defaults; every profile valid | pass |
+| Off = untouched | disabled and bypassed output bit-exact; latency 0 | pass |
+| Bleed between hits | cymbal wash at −30 dBFS: ≥ 12 dB less high band 0.6–0.95 s after each hit | pass (worst 14.7 dB) |
+| Transparency | clean snare: high band within 1.5 dB, body below 1 kHz within 0.1 dB on every hit | pass (worst 0.06 dB HF) |
+| Bleed over a hit | crash ringing over hits; tail 30–150 ms: snare profile ≥ 30 % of the ideal reduction, tight (60 ms / 0 dB) ≥ 65 %; never more than ideal + 1 dB; attack never boosted; same settings ≤ 1.5 dB on the clean snare | pass (≈ 3.0 of 9.0 dB; tight ≈ 6.7 of 9.0 dB) |
+| Learning robustness | loud crash on every other hit moves the learned ratio ≤ 2 dB | pass (0.5 dB) |
+| Block size | 64 vs 1031 samples: bit-identical | pass |
+| Sample rate | 44.1 and 96 kHz: ≥ 12 dB between hits | pass (14.8 dB) |
+| Stereo / robustness | linked gain (identical channels stay identical), NaN input → finite output | pass |
+| Clicks | enabling mid-stream: largest sample step ≤ 1.25 × the input's | pass |
+| Relearn | resetLearning() returns to the permissive start | pass |
+| Realtime | strip test now toggles de-bleed, redesigns its crossover and relearns: 0 allocations | pass |
+| Plugin | params match engine; Snare/Toms presets on, Kick/vocal off; profiles leave gain+gate alone; 0 latency; reduces wash in the plugin; v3 user presets round-trip, v2 files load with de-bleed off; Drums page renders | pass |
+
+What these tests do **not** show: how it sounds on real drums. A real snare's
+wires ring longer than its body and real cymbals overlap the snare's spectrum;
+listening tests are required.
 
 ## Plugin adapter tests
 

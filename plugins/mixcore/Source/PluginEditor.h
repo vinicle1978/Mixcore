@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ui/DrumPanel.h"
 #include "ui/GatePanel.h"
 #include "ui/Meters.h"
 #include "ui/Theme.h"
@@ -31,12 +32,14 @@ public:
     /// Rebuild the preset menu (factory + user presets from disk).
     void rebuildPresetMenu();
 
-    enum class Page { SmartGain, Gate };
+    enum class Page { SmartGain, Gate, Drums };
     void setPage(Page page);
     void mouseUp(const juce::MouseEvent& e) override
     {
         if (e.eventComponent == &gateChip_)
             setPage(Page::Gate);
+        else if (e.eventComponent == &debleedChip_)
+            setPage(Page::Drums);
     }
 
 private:
@@ -79,13 +82,18 @@ private:
     juce::Label inputReadout_, outputReadout_;
     GainHistory history_;
     juce::Label activityLabel_;
-    juce::Label staticChip_, riderChip_, guardChip_, gateChip_;
+    juce::Label staticChip_, riderChip_, guardChip_, debleedChip_, gateChip_;
     juce::TextButton gainTab_ { "Smart Gain" };
     juce::TextButton gateTab_ { "Gate" };
+    juce::TextButton drumTab_ { "Drums" };
     Page page_ = Page::SmartGain;
     GatePanel gatePanel_ { processor_ };
     GateLearnPanel gateLearnPanel_ { processor_ };
     gate::GateTelemetry gateTelemetry_;
+    DrumPanel drumPanel_ { processor_ };
+    juce::TextEditor drumInfoText_;
+    drum::DeBleedTelemetry drumTelemetry_;
+    juce::String lastDrumInfo_;
 
     // Main controls
     Knob target_, staticGain_, strength_;

@@ -5,20 +5,51 @@ namespace mixcore::plugin {
 namespace {
 constexpr const char* kRootTag = "MixCorePreset";
 constexpr const char* kModule = "SmartGain";
-constexpr int kFormatVersion = 2;
+constexpr int kFormatVersion = 3;
 } // namespace
 
-PresetManager::PresetManager() : PresetManager(defaultDirectory()) {}
+PresetManager::PresetManager() : PresetManager(defaultDirectory())
+{
+    importLegacyPresets(legacyDirectory(), directory_);
+}
 
 PresetManager::PresetManager(juce::File directory) : directory_(std::move(directory)) {}
 
-juce::File PresetManager::defaultDirectory()
+namespace {
+juce::File userDataBase()
 {
     auto base = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory);
 #if JUCE_MAC
     base = base.getChildFile("Application Support");
 #endif
-    return base.getChildFile("MixCore").getChildFile("Presets").getChildFile("Smart Gain");
+    return base;
+}
+} // namespace
+
+juce::File PresetManager::defaultDirectory()
+{
+    return userDataBase().getChildFile("VineAudio").getChildFile("MixCore").getChildFile("Presets");
+}
+
+juce::File PresetManager::legacyDirectory()
+{
+    return userDataBase().getChildFile("MixCore").getChildFile("Presets").getChildFile("Smart Gain");
+}
+
+int PresetManager::importLegacyPresets(const juce::File& legacy, const juce::File& destination)
+{
+    if (!legacy.isDirectory())
+        return 0;
+    int copied = 0;
+    for (const auto& f : legacy.findChildFiles(juce::File::findFiles, false, juce::String("*") + kExtension))
+    {
+        const auto target = destination.getChildFile(f.getFileName());
+        if (target.exists())
+            continue; // never overwrite a preset in the new location
+        if (destination.createDirectory().wasOk() && f.copyFileTo(target))
+            ++copied;
+    }
+    return copied; // originals are left where they were
 }
 
 juce::String PresetManager::sanitiseName(const juce::String& name)
@@ -48,6 +79,10 @@ std::optional<UserPreset> PresetManager::read(const juce::File& file)
         p.settings.gate = gate::GateSettings::deserialise(g->getAllSubText().trim().toStdString());
     else
         p.settings.gate = gate::GateSettings {}; // v1 file: gate off
+    if (const auto* d = xml->getChildByName("Drum"))
+        p.settings.drum = drum::DrumSettings::deserialise(d->getAllSubText().trim().toStdString());
+    else
+        p.settings.drum = drum::DrumSettings {}; // v1/v2 file: de-bleed off
     return p; // deserialise() already validated every value
 }
 
@@ -89,6 +124,8 @@ juce::String PresetManager::save(const juce::String& name, const strip::ChannelS
     s->addTextElement(juce::String(settings.gain.serialise()));
     auto* g = root.createNewChildElement("Gate");
     g->addTextElement(juce::String(settings.gate.serialise()));
+    auto* d = root.createNewChildElement("Drum");
+    d->addTextElement(juce::String(settings.drum.serialise()));
 
     // Write to a temporary file then move it into place, so a crash never
     // leaves a half-written preset.

@@ -94,7 +94,7 @@ MixCoreEditor::MixCoreEditor(MixCoreProcessor& p) : AudioProcessorEditor(&p), pr
         addAndMakeVisible(*l);
     }
     inputMeter_.setTooltip("Input level before MixCore. Bar = 400 ms RMS, line = sample peak.");
-    outputMeter_.setTooltip("Output level. The amber marker is your target RMS.");
+    outputMeter_.setTooltip("Output level. The gold marker is your target RMS.");
 
     // Status
     activityLabel_.setFont(theme::font(13.0f, true));
@@ -106,25 +106,33 @@ MixCoreEditor::MixCoreEditor(MixCoreProcessor& p) : AudioProcessorEditor(&p), pr
     staticChip_.setTooltip("Static gain: set once (manually or by calibration). Never changed automatically.");
     riderChip_.setTooltip("Rider gain: slow automatic correction while the vocal is active.");
     guardChip_.setTooltip("Peak guard reduction: safety intervention, reported separately from riding.");
+    styleChip(debleedChip_, theme::goldLight);
+    debleedChip_.setTooltip("Drum de-bleed: high-band bleed reduction (after Smart Gain, before the gate). Click to open the Drums page.");
     styleChip(gateChip_, theme::good);
     gateChip_.setTooltip("Gate: gain reduction applied after Smart Gain. Click to open the Gate page.");
-    for (auto* c : { &staticChip_, &riderChip_, &guardChip_, &gateChip_ })
+    for (auto* c : { &staticChip_, &riderChip_, &guardChip_, &debleedChip_, &gateChip_ })
         addAndMakeVisible(*c);
     addAndMakeVisible(history_);
 
     // Module pages
-    for (auto* tab : { &gainTab_, &gateTab_ })
+    for (auto* tab : { &gainTab_, &gateTab_, &drumTab_ })
     {
         tab->setClickingTogglesState(true);
         tab->setRadioGroupId(4711);
-        tab->setColour(juce::TextButton::buttonOnColourId, theme::panelEdge.brighter(0.25f));
-        tab->setColour(juce::TextButton::textColourOnId, theme::text);
+        tab->setColour(juce::TextButton::buttonOnColourId, theme::gold);
+        tab->setColour(juce::TextButton::textColourOnId, theme::background);
         addAndMakeVisible(*tab);
     }
     gainTab_.setTooltip("Smart Gain: static gain, rider and peak safety.");
     gateTab_.setTooltip("Gate / expander: source profiles, threshold learning, key filters.");
     gainTab_.onClick = [this] { if (gainTab_.getToggleState()) setPage(Page::SmartGain); };
     gateTab_.onClick = [this] { if (gateTab_.getToggleState()) setPage(Page::Gate); };
+    drumTab_.setTooltip("Drums: de-bleed (reduces cymbal and hi-hat bleed in drum mics, also while the gate is open).");
+    drumTab_.onClick = [this] { if (drumTab_.getToggleState()) setPage(Page::Drums); };
+    debleedChip_.addMouseListener(this, false);
+    addChildComponent(drumPanel_);
+    styleReadout(drumInfoText_);
+    addChildComponent(drumInfoText_);
     gainTab_.setToggleState(true, juce::dontSendNotification);
     gateChip_.addMouseListener(this, false);
     addChildComponent(gatePanel_);
@@ -233,15 +241,18 @@ void MixCoreEditor::setAdvanced(bool advanced)
 
 juce::Rectangle<int> MixCoreEditor::statusTextArea() const
 {
-    return gainTab_.getBounds().withLeft(gateTab_.getRight() + 8).withRight(activityLabel_.getRight());
+    return gainTab_.getBounds().withLeft(drumTab_.getRight() + 8).withRight(activityLabel_.getRight());
 }
 
 void MixCoreEditor::setPage(Page page)
 {
     page_ = page;
     const bool gainPage = page == Page::SmartGain;
+    const bool gatePage = page == Page::Gate;
+    const bool drumPage = page == Page::Drums;
     gainTab_.setToggleState(gainPage, juce::dontSendNotification);
-    gateTab_.setToggleState(!gainPage, juce::dontSendNotification);
+    gateTab_.setToggleState(gatePage, juce::dontSendNotification);
+    drumTab_.setToggleState(drumPage, juce::dontSendNotification);
 
     history_.setVisible(gainPage);
     for (auto* k : { &target_, &staticGain_, &strength_ })
@@ -256,7 +267,10 @@ void MixCoreEditor::setPage(Page page)
         k->slider.setVisible(gainPage && advanced_);
         k->label.setVisible(gainPage && advanced_);
     }
-    gatePanel_.setVisible(!gainPage);
+    gatePanel_.setVisible(gatePage);
+    drumPanel_.setVisible(drumPage);
+    drumInfoText_.setVisible(drumPage);
+    lastDrumInfo_.clear();
 
     for (juce::Component* c : { static_cast<juce::Component*>(&calibrateButton_), static_cast<juce::Component*>(&applyButton_),
                                 static_cast<juce::Component*>(&cancelCalButton_), static_cast<juce::Component*>(&calibrationText_) })
@@ -266,7 +280,7 @@ void MixCoreEditor::setPage(Page page)
         applySafeButton_.setVisible(false);
         progressBar_.setVisible(false);
     }
-    gateLearnPanel_.setVisible(!gainPage);
+    gateLearnPanel_.setVisible(gatePage);
     if (gainPage)
         updateCalibrationUi();
     resized();
@@ -275,14 +289,36 @@ void MixCoreEditor::setPage(Page page)
 
 void MixCoreEditor::paint(juce::Graphics& g)
 {
-    g.fillAll(theme::background);
+    // Background: warm black at the top fading to black.
+    g.setGradientFill(juce::ColourGradient(theme::backgroundTop, 0.0f, 0.0f, theme::background, 0.0f,
+                                           static_cast<float>(getHeight()) * 0.6f, false));
+    g.fillAll();
+
+    // Header: VineAudio logo, product name, thin gold rule underneath.
     auto header = getLocalBounds().removeFromTop(52).reduced(18, 0);
+    if (const auto logo = theme::logoImage(); logo.isValid())
+    {
+        const float h = 38.0f;
+        const float w = h * static_cast<float>(logo.getWidth()) / static_cast<float>(logo.getHeight());
+        g.drawImage(logo, juce::Rectangle<float>(static_cast<float>(header.getX()), static_cast<float>(header.getCentreY()) - h * 0.5f, w, h),
+                    juce::RectanglePlacement::centred);
+        header.removeFromLeft(static_cast<int>(w) + 14);
+    }
+    g.setColour(theme::gold.withAlpha(0.5f));
+    g.fillRect(header.getX(), header.getCentreY() - 11, 1, 22);
+    header.removeFromLeft(12);
     g.setColour(theme::text);
-    g.setFont(theme::font(22.0f, true));
-    g.drawText("MixCore", header.removeFromLeft(108), juce::Justification::centredLeft);
-    g.setColour(theme::muted);
-    g.setFont(theme::font(13.0f));
-    g.drawText("Channel", header.removeFromLeft(80), juce::Justification::centredLeft);
+    g.setFont(theme::font(20.0f, true));
+    g.drawText("MixCore", header.removeFromLeft(90), juce::Justification::centredLeft);
+    {
+        juce::ColourGradient rule(theme::gold.withAlpha(0.0f), 0.0f, 52.0f, theme::gold.withAlpha(0.0f),
+                                  static_cast<float>(getWidth()), 52.0f, false);
+        rule.addColour(0.15, theme::goldShadow);
+        rule.addColour(0.5, theme::goldHighlight.withAlpha(0.8f));
+        rule.addColour(0.85, theme::goldShadow);
+        g.setGradientFill(rule);
+        g.fillRect(0, 51, getWidth(), 1);
+    }
 
     if (telemetry_.sampleRate > 0.0)
     {
@@ -293,24 +329,24 @@ void MixCoreEditor::paint(juce::Graphics& g)
     }
 
     // Panels
-    g.setColour(theme::panel.withAlpha(0.55f));
     for (auto r : { juce::Rectangle<int>(12, 60, 150, getHeight() - 72),
                     juce::Rectangle<int>(getWidth() - 352, 60, 340, getHeight() - 72) })
-        g.fillRoundedRectangle(r.toFloat(), 8.0f);
+        theme::fillPanel(g, r.toFloat());
 
     g.setColour(theme::muted);
     g.setFont(theme::font(11.0f, true));
     g.drawText("STATIC", staticChip_.getBounds().translated(0, -16).withHeight(14), juce::Justification::centred);
     g.drawText("RIDER", riderChip_.getBounds().translated(0, -16).withHeight(14), juce::Justification::centred);
     g.drawText("PEAK GUARD", guardChip_.getBounds().translated(0, -16).withHeight(14), juce::Justification::centred);
+    g.drawText("DE-BLEED", debleedChip_.getBounds().translated(0, -16).withHeight(14), juce::Justification::centred);
     g.drawText("GATE", gateChip_.getBounds().translated(0, -16).withHeight(14), juce::Justification::centred);
-    g.drawText(page_ == Page::Gate ? "GATE THRESHOLD" : "CALIBRATION", juce::Rectangle<int>(getWidth() - 340, 66, 200, 16),
+    g.drawText(page_ == Page::Gate ? "GATE THRESHOLD" : page_ == Page::Drums ? "DE-BLEED" : "CALIBRATION", juce::Rectangle<int>(getWidth() - 340, 66, 200, 16),
                juce::Justification::centredLeft);
     g.drawText("MIX COACH", coachText_.getBounds().translated(0, -20).withHeight(16), juce::Justification::centredLeft);
 
     // Signal-flow arrows between the chips.
     g.setColour(theme::muted);
-    for (auto* c : { &staticChip_, &riderChip_, &guardChip_ })
+    for (auto* c : { &staticChip_, &riderChip_, &guardChip_, &debleedChip_ })
     {
         const auto r = c->getBounds();
         g.drawArrow(juce::Line<float>(static_cast<float>(r.getRight() + 4), static_cast<float>(r.getCentreY()),
@@ -326,7 +362,7 @@ void MixCoreEditor::resized()
     bypassButton_.setBounds(header.removeFromRight(84));
     header.removeFromRight(8);
     advancedButton_.setBounds(header.removeFromRight(96));
-    header.removeFromLeft(196); // title text
+    header.removeFromLeft(262); // logo + product name
     presetBox_.setBounds(header.removeFromLeft(juce::jmin(300, header.getWidth() - 160)));
     header.removeFromLeft(6);
     savePresetButton_.setBounds(header.removeFromLeft(62));
@@ -349,6 +385,7 @@ void MixCoreEditor::resized()
     right.removeFromTop(22);
     auto cal = right.removeFromTop(220);
     gateLearnPanel_.setBounds(cal);
+    drumInfoText_.setBounds(cal);
     calibrateButton_.setBounds(cal.removeFromTop(30));
     cal.removeFromTop(6);
     progressBar_.setBounds(cal.removeFromTop(10));
@@ -370,13 +407,15 @@ void MixCoreEditor::resized()
     gainTab_.setBounds(tabs.removeFromLeft(110));
     tabs.removeFromLeft(4);
     gateTab_.setBounds(tabs.removeFromLeft(80));
+    tabs.removeFromLeft(4);
+    drumTab_.setBounds(tabs.removeFromLeft(80));
     centre.removeFromTop(4);
     activityLabel_.setBounds(centre.removeFromTop(20));
     centre.removeFromTop(16);
     auto chips = centre.removeFromTop(36);
     constexpr int gap = 18;
-    const int chipW = (chips.getWidth() - 3 * gap) / 4;
-    for (auto* chip : { &staticChip_, &riderChip_, &guardChip_ })
+    const int chipW = (chips.getWidth() - 4 * gap) / 5;
+    for (auto* chip : { &staticChip_, &riderChip_, &guardChip_, &debleedChip_ })
     {
         chip->setBounds(chips.removeFromLeft(chipW));
         chips.removeFromLeft(gap);
@@ -385,6 +424,7 @@ void MixCoreEditor::resized()
     centre.removeFromTop(10);
 
     gatePanel_.setBounds(centre);
+    drumPanel_.setBounds(centre);
 
     if (!advanced_)
     {
@@ -452,6 +492,20 @@ void MixCoreEditor::refresh()
     if (gateFresh)
         outputMeter_.setLevels(gt.outputRmsDb, gt.outputPeakDb, dt); // channel output (after the gate)
     gatePanel_.update(gt, gateFresh);
+    const bool drumFresh = processor_.readDebleedTelemetry(drumTelemetry_);
+    const auto& drumT = drumTelemetry_;
+    drumPanel_.update(drumT, drumFresh);
+    if (!drumT.enabled)
+    {
+        debleedChip_.setText("off", juce::dontSendNotification);
+        debleedChip_.setColour(juce::Label::textColourId, theme::muted);
+    }
+    else
+    {
+        debleedChip_.setText(drumT.reductionDb < 0.5f ? "clean" : "-" + juce::String(drumT.reductionDb, 1) + " dB",
+                             juce::dontSendNotification);
+        debleedChip_.setColour(juce::Label::textColourId, theme::goldLight);
+    }
     if (page_ == Page::Gate)
         gateLearnPanel_.update(gt.learnProgress);
 
@@ -496,6 +550,15 @@ void MixCoreEditor::refresh()
         coachCountdown_ = kTimerHz / 3; // ~3 Hz is plenty for text
         updateCoach(t);
         updatePresetDisplay();
+        if (page_ == Page::Drums)
+        {
+            const auto info = drumPanel_.statusText(drumT);
+            if (info != lastDrumInfo_)
+            {
+                lastDrumInfo_ = info;
+                drumInfoText_.setText(info, false);
+            }
+        }
     }
     repaint(statusTextArea()); // sample-rate/latency text
 }
