@@ -60,8 +60,8 @@ for part in "${PARTS[@]}"; do
   # Never let Installer "relocate" the bundle to an older copy elsewhere.
   plist="$WORK/$suffix.plist"
   pkgbuild --analyze --root "$stage" "$plist"
-  plutil -replace 0.BundleIsRelocatable -bool NO "$plist"
-  plutil -replace 0.BundleOverwriteAction -string upgrade "$plist"
+  /usr/libexec/PlistBuddy -c "Set :0:BundleIsRelocatable false" "$plist"
+  /usr/libexec/PlistBuddy -c "Set :0:BundleOverwriteAction upgrade" "$plist"
 
   scripts_args=()
   if [[ "$suffix" == "au" ]]; then
