@@ -33,11 +33,19 @@ jobs:
         run: cmake --build build --config Release --parallel
 
       - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure
+        # Timing benchmarks are covered by ci.yml; they must not block an installer
+        # build on a busy shared runner.
+        run: ctest --test-dir build -C Release --output-on-failure -LE performance
+
+      - name: List build output (diagnostics)
+        if: always()
+        run: find build/plugins/mixcore/MixCore_artefacts/Release -maxdepth 3 || true
 
       - name: Build .pkg
         run: |
-          packaging/macos/build_pkg.sh build/plugins/mixcore/MixCore_artefacts/Release \
+          # Run through bash so it works even if the file lost its executable bit
+          # (e.g. when the repo was uploaded through the GitHub website).
+          bash packaging/macos/build_pkg.sh build/plugins/mixcore/MixCore_artefacts/Release \
             "${{ steps.version.outputs.value }}" dist
 
       - name: Install the .pkg on this runner
@@ -87,7 +95,7 @@ jobs:
         run: cmake --build build --config Release --parallel
 
       - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure
+        run: ctest --test-dir build -C Release --output-on-failure -LE performance
 
       - name: Install Inno Setup if missing
         shell: pwsh
