@@ -1,35 +1,45 @@
 #pragma once
 // VineAudio visual language for MixCore.
 //
-// Palette: black, white, VineAudio gold (sampled from the logo) and red, with
-// gold gradients. Gold = levels and active processing; white/champagne = the
-// rider and text; red is reserved for safety intervention and problems, so it
-// always means "look here".
+// Palette: shades of blue with gradients, and silver. Blue = levels and active
+// processing; silver/white = the rider, thresholds and text. Orange and red are
+// kept for level warnings only: orange = getting hot (above the warning level),
+// red = clipping, safety intervention and problems, so they always mean
+// "look here".
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
 namespace mixcore::plugin::theme {
 
 // ---- Base -----------------------------------------------------------------
-inline const juce::Colour background { 0xff0a0a0b };  // near-black
-inline const juce::Colour backgroundTop { 0xff17140f }; // warm black (top of gradients)
-inline const juce::Colour panel { 0xff15130f };
-inline const juce::Colour panelEdge { 0xff2f2820 };   // warm charcoal, tracks and dividers
-inline const juce::Colour text { 0xfff7f3ec };        // white
-inline const juce::Colour muted { 0xff9d9286 };       // warm grey
+inline const juce::Colour background { 0xff070b12 };    // navy black
+inline const juce::Colour backgroundTop { 0xff0f1a2b }; // deep blue (top of gradients)
+inline const juce::Colour panel { 0xff0e1622 };
+inline const juce::Colour panelEdge { 0xff24344b };     // steel blue, tracks and dividers
+inline const juce::Colour text { 0xfff3f7fb };          // white
+inline const juce::Colour muted { 0xffa3b1c2 };         // light steel grey (secondary text)
+inline const juce::Colour label { 0xffd7e0ea };         // knob and section labels: bright silver
 
-// ---- VineAudio gold ---------------------------------------------------------
-inline const juce::Colour goldShadow { 0xff72401d };
-inline const juce::Colour gold { 0xffcf9156 };
-inline const juce::Colour goldLight { 0xffe9b77c };
-inline const juce::Colour goldHighlight { 0xfffdde9f };
+// ---- VineAudio blue ---------------------------------------------------------
+inline const juce::Colour blueDeep { 0xff0b3a8c };
+inline const juce::Colour blue { 0xff2f7df6 };
+inline const juce::Colour blueLight { 0xff6db3ff };
+inline const juce::Colour ice { 0xffc4e4ff };
+
+// ---- Silver -----------------------------------------------------------------
+inline const juce::Colour silverShadow { 0xff5d6b7c };
+inline const juce::Colour silver { 0xffb4bfcc };
+inline const juce::Colour silverHighlight { 0xfff1f5f9 };
+
+// ---- Level warnings (only where levels need attention) ---------------------
+inline const juce::Colour warning { 0xffff8c1a };       // orange: hot level
+inline const juce::Colour safety { 0xffe5383b };        // red: clip / guard / problems / reduction
 
 // ---- Signal roles (names kept so every component maps onto the palette) ----
-inline const juce::Colour level { 0xffd9a15e };   // meters, static gain, drum body: gold
-inline const juce::Colour rider { 0xfff6e6c8 };   // rider gain, thresholds: champagne white
-inline const juce::Colour safety { 0xffe5383b };  // guard, clipping, problems, reduction: red
-inline const juce::Colour good { 0xfff2c46d };    // active / open: bright gold
-inline const juce::Colour hold { 0xff9a6438 };    // phrase hold / confirming: deep copper
+inline const juce::Colour level { 0xff3d8ef5 };   // meters, static gain, drum body, key level: blue
+inline const juce::Colour rider { 0xffdfe7f1 };   // rider gain, thresholds, high band: silver white
+inline const juce::Colour good { 0xff4fc3f7 };    // active / open: bright sky blue
+inline const juce::Colour hold { 0xff6d7fa8 };    // phrase hold / confirming: steel indigo
 
 inline juce::Font font(float size, bool bold = false)
 {
@@ -43,18 +53,33 @@ inline juce::String formatDb(float db, int decimals = 1, bool sign = true)
     return (sign && db > 0.0f ? "+" : "") + juce::String(db, decimals);
 }
 
-/// Metallic gold gradient (shadow -> gold -> highlight), like the logo ribbon.
-inline juce::ColourGradient goldGradient(juce::Rectangle<float> r, bool vertical = true)
+/// Metallic blue gradient (deep -> blue -> ice), bottom to top (or left to right).
+inline juce::ColourGradient blueGradient(juce::Rectangle<float> r, bool vertical = true)
 {
-    juce::ColourGradient grad(goldShadow, vertical ? r.getCentreX() : r.getX(), vertical ? r.getBottom() : r.getCentreY(),
-                              goldHighlight, vertical ? r.getCentreX() : r.getRight(), vertical ? r.getY() : r.getCentreY(),
-                              false);
-    grad.addColour(0.55, gold);
-    grad.addColour(0.85, goldLight);
+    juce::ColourGradient grad(blueDeep, vertical ? r.getCentreX() : r.getX(), vertical ? r.getBottom() : r.getCentreY(),
+                              ice, vertical ? r.getCentreX() : r.getRight(), vertical ? r.getY() : r.getCentreY(), false);
+    grad.addColour(0.55, blue);
+    grad.addColour(0.85, blueLight);
     return grad;
 }
 
-/// Red gradient for alerts and safety (dark red -> red -> light red).
+/// Brushed silver gradient, for rims and highlights.
+inline juce::ColourGradient silverGradient(juce::Rectangle<float> r)
+{
+    juce::ColourGradient grad(silverShadow, r.getCentreX(), r.getBottom(), silverHighlight, r.getCentreX(), r.getY(), false);
+    grad.addColour(0.6, silver);
+    return grad;
+}
+
+/// Orange gradient for hot levels.
+inline juce::ColourGradient orangeGradient(juce::Rectangle<float> r)
+{
+    juce::ColourGradient grad(warning.darker(0.5f), r.getCentreX(), r.getBottom(), warning.brighter(0.3f), r.getCentreX(), r.getY(), false);
+    grad.addColour(0.5, warning);
+    return grad;
+}
+
+/// Red gradient for clipping and safety (dark red -> red -> light red).
 inline juce::ColourGradient redGradient(juce::Rectangle<float> r)
 {
     juce::ColourGradient grad(safety.darker(0.6f), r.getCentreX(), r.getBottom(), safety.brighter(0.35f), r.getCentreX(),
@@ -63,12 +88,12 @@ inline juce::ColourGradient redGradient(juce::Rectangle<float> r)
     return grad;
 }
 
-/// Subtle warm-black panel fill with a hairline gold edge.
+/// Deep-blue panel fill with a hairline silver edge.
 inline void fillPanel(juce::Graphics& g, juce::Rectangle<float> r, float radius = 8.0f, float edgeAlpha = 0.22f)
 {
     g.setGradientFill(juce::ColourGradient(backgroundTop, r.getCentreX(), r.getY(), panel, r.getCentreX(), r.getBottom(), false));
     g.fillRoundedRectangle(r, radius);
-    g.setColour(gold.withAlpha(edgeAlpha));
+    g.setColour(silver.withAlpha(edgeAlpha));
     g.drawRoundedRectangle(r.reduced(0.5f), radius, 1.0f);
 }
 
@@ -84,35 +109,35 @@ public:
         setColour(juce::Slider::rotarySliderOutlineColourId, panelEdge);
         setColour(juce::Label::textColourId, text);
         setColour(juce::TextButton::buttonColourId, panel);
-        setColour(juce::TextButton::buttonOnColourId, gold);
+        setColour(juce::TextButton::buttonOnColourId, blue);
         setColour(juce::TextButton::textColourOffId, text);
-        setColour(juce::TextButton::textColourOnId, background);
+        setColour(juce::TextButton::textColourOnId, text);
         setColour(juce::ToggleButton::textColourId, text);
-        setColour(juce::ToggleButton::tickColourId, goldLight);
+        setColour(juce::ToggleButton::tickColourId, blueLight);
         setColour(juce::ToggleButton::tickDisabledColourId, muted);
         setColour(juce::TextEditor::backgroundColourId, panel);
         setColour(juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
         setColour(juce::TextEditor::focusedOutlineColourId, juce::Colours::transparentBlack);
         setColour(juce::TextEditor::textColourId, text);
-        setColour(juce::TextEditor::highlightColourId, gold.withAlpha(0.35f));
-        setColour(juce::ProgressBar::foregroundColourId, gold);
+        setColour(juce::TextEditor::highlightColourId, blue.withAlpha(0.4f));
+        setColour(juce::ProgressBar::foregroundColourId, blue);
         setColour(juce::ProgressBar::backgroundColourId, panelEdge);
-        setColour(juce::ScrollBar::thumbColourId, gold.withAlpha(0.45f));
+        setColour(juce::ScrollBar::thumbColourId, silver.withAlpha(0.45f));
         setColour(juce::ComboBox::backgroundColourId, panel);
-        setColour(juce::ComboBox::outlineColourId, gold.withAlpha(0.35f));
+        setColour(juce::ComboBox::outlineColourId, silver.withAlpha(0.35f));
         setColour(juce::ComboBox::textColourId, text);
-        setColour(juce::ComboBox::arrowColourId, goldLight);
-        setColour(juce::PopupMenu::backgroundColourId, juce::Colour(0xff121010));
+        setColour(juce::ComboBox::arrowColourId, silver);
+        setColour(juce::PopupMenu::backgroundColourId, juce::Colour(0xff0b1320));
         setColour(juce::PopupMenu::textColourId, text);
-        setColour(juce::PopupMenu::headerTextColourId, goldLight);
-        setColour(juce::PopupMenu::highlightedBackgroundColourId, gold.withAlpha(0.85f));
-        setColour(juce::PopupMenu::highlightedTextColourId, background);
-        setColour(juce::AlertWindow::backgroundColourId, juce::Colour(0xff121010));
+        setColour(juce::PopupMenu::headerTextColourId, blueLight);
+        setColour(juce::PopupMenu::highlightedBackgroundColourId, blue);
+        setColour(juce::PopupMenu::highlightedTextColourId, text);
+        setColour(juce::AlertWindow::backgroundColourId, juce::Colour(0xff0b1320));
         setColour(juce::AlertWindow::textColourId, text);
-        setColour(juce::AlertWindow::outlineColourId, gold.withAlpha(0.5f));
-        setColour(juce::TooltipWindow::backgroundColourId, juce::Colour(0xff121010));
+        setColour(juce::AlertWindow::outlineColourId, silver.withAlpha(0.5f));
+        setColour(juce::TooltipWindow::backgroundColourId, juce::Colour(0xff0b1320));
         setColour(juce::TooltipWindow::textColourId, text);
-        setColour(juce::TooltipWindow::outlineColourId, gold.withAlpha(0.5f));
+        setColour(juce::TooltipWindow::outlineColourId, silver.withAlpha(0.5f));
     }
 
     void drawButtonBackground(juce::Graphics& g, juce::Button& button, const juce::Colour& backgroundColour,
@@ -123,10 +148,10 @@ public:
         const bool on = button.getToggleState();
         if (on)
         {
-            // "On" buttons: metallic gold, or red when the button's on-colour is a warning (e.g. Bypass).
+            // "On" buttons: metallic blue, or red when the button's on-colour is a warning (e.g. Bypass).
             const auto onColour = button.findColour(juce::TextButton::buttonOnColourId);
             const bool redOn = std::abs(onColour.getHue() - safety.getHue()) < 0.05f && onColour.getSaturation() > 0.5f;
-            g.setGradientFill(redOn ? redGradient(r) : goldGradient(r));
+            g.setGradientFill(redOn ? redGradient(r) : blueGradient(r));
             g.fillRoundedRectangle(r, radius);
         }
         else
@@ -135,7 +160,7 @@ public:
                                       r.getCentreX(), r.getBottom(), false);
             g.setGradientFill(grad);
             g.fillRoundedRectangle(r, radius);
-            g.setColour(gold.withAlpha(!button.isEnabled() ? 0.12f : (highlighted ? 0.75f : 0.32f)));
+            g.setColour(silver.withAlpha(!button.isEnabled() ? 0.12f : (highlighted ? 0.8f : 0.35f)));
             g.drawRoundedRectangle(r, radius, 1.0f);
         }
         if (down)
@@ -150,14 +175,14 @@ public:
         auto r = juce::Rectangle<float>(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)).reduced(0.5f);
         g.setGradientFill(juce::ColourGradient(panel.brighter(0.1f), 0.0f, 0.0f, panel.darker(0.3f), 0.0f, r.getBottom(), false));
         g.fillRoundedRectangle(r, 5.0f);
-        g.setColour(gold.withAlpha(box.isMouseOver(true) ? 0.75f : 0.4f));
+        g.setColour(silver.withAlpha(box.isMouseOver(true) ? 0.8f : 0.4f));
         g.drawRoundedRectangle(r, 5.0f, 1.0f);
         const float ax = static_cast<float>(width) - 18.0f, ay = static_cast<float>(height) * 0.5f;
         juce::Path arrow;
         arrow.startNewSubPath(ax - 4.0f, ay - 2.0f);
         arrow.lineTo(ax, ay + 2.5f);
         arrow.lineTo(ax + 4.0f, ay - 2.0f);
-        g.setColour(goldLight);
+        g.setColour(silver);
         g.strokePath(arrow, juce::PathStrokeType(1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 
@@ -194,14 +219,14 @@ public:
         g.setGradientFill(grad);
         g.strokePath(fill, juce::PathStrokeType(thickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-        // Knob body: black with a soft gold rim.
+        // Knob body: dark steel with a brushed silver rim.
         const float inner = radius - thickness * 2.2f;
         const auto body = juce::Rectangle<float>(centre.x - inner, centre.y - inner, inner * 2.0f, inner * 2.0f);
-        g.setGradientFill(juce::ColourGradient(juce::Colour(0xff2a2520), body.getCentreX(), body.getY(), juce::Colour(0xff0c0b0a),
+        g.setGradientFill(juce::ColourGradient(juce::Colour(0xff26303e), body.getCentreX(), body.getY(), juce::Colour(0xff090d14),
                                                body.getCentreX(), body.getBottom(), false));
         g.fillEllipse(body);
-        g.setColour(gold.withAlpha(0.35f));
-        g.drawEllipse(body, 1.0f);
+        g.setGradientFill(silverGradient(body));
+        g.drawEllipse(body, 1.2f);
         const juce::Point<float> tip(centre.x + inner * 0.8f * std::sin(a1), centre.y - inner * 0.8f * std::cos(a1));
         g.setColour(text);
         g.drawLine(juce::Line<float>(centre.getPointOnCircumference(inner * 0.25f, a1), tip), 2.0f);
@@ -216,13 +241,13 @@ public:
         if (progress > 0.0)
         {
             auto f = r.withWidth(r.getWidth() * static_cast<float>(juce::jlimit(0.0, 1.0, progress)));
-            g.setGradientFill(goldGradient(r, false));
+            g.setGradientFill(blueGradient(r, false));
             g.fillRoundedRectangle(f, r.getHeight() * 0.5f);
         }
     }
 };
 
-/// The VineAudio logo (gold emblem + wordmark), drawn from embedded PNG data.
+/// The VineAudio logo (silver-blue emblem + wordmark), drawn from embedded PNG data.
 juce::Image logoImage();
 juce::Image emblemImage();
 

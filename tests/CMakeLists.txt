@@ -9,6 +9,7 @@ add_executable(mixcore_tests
     dsp/test_presets.cpp
     dsp/test_gate.cpp
     dsp/test_debleed.cpp
+    dsp/test_modules.cpp
     regression/test_regression.cpp)
 target_link_libraries(mixcore_tests PRIVATE mixcore::gain mixcore::gate mixcore::drum mixcore::strip Catch2::Catch2WithMain)
 target_compile_definitions(mixcore_tests PRIVATE

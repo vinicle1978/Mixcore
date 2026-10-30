@@ -5,7 +5,7 @@ namespace mixcore::plugin {
 namespace {
 constexpr const char* kRootTag = "MixCorePreset";
 constexpr const char* kModule = "SmartGain";
-constexpr int kFormatVersion = 3;
+constexpr int kFormatVersion = 4;
 } // namespace
 
 PresetManager::PresetManager() : PresetManager(defaultDirectory())
@@ -70,6 +70,9 @@ std::optional<UserPreset> PresetManager::read(const juce::File& file)
 
     UserPreset p;
     p.name = xml->getStringAttribute("name", file.getFileNameWithoutExtension());
+    // v4: module power and source type (older files: Smart Gain on, vocal).
+    p.settings.gainOn = xml->getBoolAttribute("smartGainOn", true);
+    p.settings.source = gain::sourceFromName(xml->getStringAttribute("source", "Vocal").toStdString());
     p.file = file;
     if (const auto* s = xml->getChildByName("Settings"))
         p.settings.gain = gain::SmartGainSettings::deserialise(s->getAllSubText().trim().toStdString());
@@ -119,6 +122,8 @@ juce::String PresetManager::save(const juce::String& name, const strip::ChannelS
     root.setAttribute("version", kFormatVersion);
     root.setAttribute("module", kModule);
     root.setAttribute("name", clean);
+    root.setAttribute("source", gain::words(settings.source).name);
+    root.setAttribute("smartGainOn", settings.gainOn);
     root.setAttribute("created", juce::Time::getCurrentTime().toISO8601(true));
     auto* s = root.createNewChildElement("Settings");
     s->addTextElement(juce::String(settings.gain.serialise()));

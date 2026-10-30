@@ -364,8 +364,8 @@ TEST_CASE("Editor shows the preset menu with factory and user presets", "[plugin
 
     juce::ComboBox* box = nullptr;
     for (auto* child : ed.getChildren())
-        if (auto* c = dynamic_cast<juce::ComboBox*>(child))
-            box = c;
+        if (auto* c = dynamic_cast<juce::ComboBox*>(child); c != nullptr && c->getNumItems() > gain::kNumSourceTypes)
+            box = c; // the preset menu (the other header combo is the source type)
     REQUIRE(box != nullptr);
     CHECK(box->getText() == "Backing Vocal - Tight");
     CHECK(box->getNumItems() >= static_cast<int>(gain::factoryPresets().size()) + 1);
@@ -668,7 +668,7 @@ TEST_CASE("User presets include de-bleed; older presets load with it off", "[plu
     setParam(p, ids::drumDebleedLength, 220.0f);
     REQUIRE(p.saveUserPreset("Church Snare").isEmpty());
     const auto text = temp.dir.getChildFile("Church Snare.mixpreset").loadFileAsString();
-    CHECK(text.contains("version=\"3\""));
+    CHECK(text.contains("version=\"4\""));
     CHECK(text.contains("<Drum>"));
 
     MixCoreProcessor q;
@@ -761,4 +761,98 @@ TEST_CASE("Plugin reports the VineAudio brand", "[plugin][brand]")
     CHECK(juce::String(JucePlugin_Name) == "MixCore");
     CHECK(theme::logoImage().isValid());
     CHECK(theme::emblemImage().isValid());
+}
+
+TEST_CASE("Module power and source type in the plugin", "[plugin][modules]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    auto c = p.currentChannelSettings();
+    CHECK(c.gainOn);                    // Smart Gain on by default
+    CHECK_FALSE(c.gate.enabled);        // everything else off
+    CHECK_FALSE(c.drum.debleedEnabled);
+    CHECK(c.source == gain::SourceType::Vocal);
+    CHECK_FALSE(p.state().getParameter(ids::sourceType)->isAutomatable());
+
+    REQUIRE(p.loadFactoryPreset("Kick Drum"));
+    CHECK(p.currentChannelSettings().source == gain::SourceType::Drum);
+
+    // Smart Gain off: static gain is not applied.
+    REQUIRE(p.loadFactoryPreset("Lead Vocal - Natural"));
+    setParam(p, ids::staticGain, 9.0f);
+    setParam(p, ids::smartGainOn, 0.0f);
+    CHECK(p.isPresetModified());
+    p.setPlayConfigDetails(1, 1, 48000.0, 256);
+    p.prepareToPlay(48000.0, 256);
+    auto audio = makeSine(1, 48000, 48000.0, 0.1f);
+    const auto dry = audio;
+    run(p, audio, 256);
+    CHECK(audio.getRMSLevel(0, 24000, 24000) == Approx(dry.getRMSLevel(0, 24000, 24000)).margin(1.0e-6));
+}
+
+TEST_CASE("User presets keep source type and module power; older files default to vocal/on", "[plugin][modules][presets]")
+{
+    JuceEnv env;
+    TempPresetDir temp;
+    MixCoreProcessor p;
+    p.setPresetDirectory(temp.dir);
+    p.loadFactoryPreset("Snare Drum");
+    setParam(p, ids::smartGainOn, 0.0f);
+    REQUIRE(p.saveUserPreset("Snare no gain").isEmpty());
+    const auto text = temp.dir.getChildFile("Snare no gain.mixpreset").loadFileAsString();
+    CHECK(text.contains("version=\"4\""));
+    CHECK(text.contains("source=\"Drum\""));
+
+    MixCoreProcessor q;
+    q.setPresetDirectory(temp.dir);
+    REQUIRE(q.loadUserPreset("Snare no gain"));
+    CHECK_FALSE(q.currentChannelSettings().gainOn);
+    CHECK(q.currentChannelSettings().source == gain::SourceType::Drum);
+    CHECK_FALSE(q.isPresetModified());
+
+    temp.dir.getChildFile("Old.mixpreset")
+        .replaceWithText("<?xml version=\"1.0\"?><MixCorePreset version=\"3\" module=\"SmartGain\" name=\"Old\">"
+                         "<Settings>targetRmsDb=-20;</Settings></MixCorePreset>");
+    REQUIRE(q.loadUserPreset("Old"));
+    CHECK(q.currentChannelSettings().gainOn);
+    CHECK(q.currentChannelSettings().source == gain::SourceType::Vocal);
+}
+
+TEST_CASE("Off modules are shown as off", "[plugin][modules][editor]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    p.loadFactoryPreset("Kick Drum");
+    setParam(p, ids::drumDebleed, 0.0f);
+    p.setPlayConfigDetails(1, 1, 48000.0, 480);
+    p.prepareToPlay(48000.0, 480);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
+    auto& ed = dynamic_cast<MixCoreEditor&>(*editor);
+    juce::AudioBuffer<float> block(1, 480);
+    juce::MidiBuffer midi;
+    for (int b = 0; b < 120; ++b)
+    {
+        for (int i = 0; i < 480; ++i)
+        {
+            const float t = static_cast<float>((b * 480 + i) % 24000) / 48000.0f;
+            block.setSample(0, i, 0.5f * std::exp(-t / 0.12f) * std::sin(2.0f * 3.14159f * 60.0f * t));
+        }
+        p.processBlock(block, midi);
+        ed.refresh();
+    }
+    for (auto page : { MixCoreEditor::Page::Drums, MixCoreEditor::Page::SmartGain })
+    {
+        ed.setPage(page);
+        for (int k = 0; k < 12; ++k)
+            ed.refresh();
+        const auto image = ed.createComponentSnapshot(ed.getLocalBounds(), true, 1.0f);
+        CHECK(image.getWidth() == ed.getWidth());
+        if (const char* outDir = std::getenv("MIXCORE_SNAPSHOT_DIR"))
+        {
+            juce::File f(juce::String(outDir) + (page == MixCoreEditor::Page::Drums ? "/mixcore-drums-off.png" : "/mixcore-kick.png"));
+            f.deleteFile();
+            juce::FileOutputStream stream(f);
+            juce::PNGImageFormat().writeImageToStream(image, stream);
+        }
+    }
 }

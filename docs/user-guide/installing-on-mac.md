@@ -49,8 +49,8 @@ Installed to:
 * **Calibrate:** press Calibrate during a sung passage, wait for the result,
   press **Apply suggestion**. The Static gain knob should move, and
   **Cmd-Z** in Logic should undo it.
-* **Rider:** the champagne-white line in the graph moves slowly up on quiet phrases and
-  down on loud ones, and stays flat in pauses (activity band not gold).
+* **Rider:** the silver-white line in the graph moves slowly up on quiet phrases and
+  down on loud ones, and stays flat in pauses (activity band not blue).
 * **Automation:** in Logic, show automation for the track and pick
   MixCore → Static Gain / Target RMS. Write a move and play it back.
 * **Save/restore:** change settings, save the project, quit, reopen. Settings

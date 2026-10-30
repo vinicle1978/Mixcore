@@ -15,7 +15,7 @@ Timing-sensitive suites (`realtime`, `performance`) are marked `RUN_SERIAL`.
 
 * **Date:** 2026-10-29 · **Commit:** see `git log` · **Machine:** Linux x86_64 dev
   container, 2 vCPU Intel Xeon @ 2.10 GHz, GCC 13.3, JUCE 8.0.4, Catch2 3.7.1.
-* **Result: 93 / 93 CTest tests passed** (after the VineAudio rebrand; 90 / 90 after drum de-bleed; 74 / 74 after the gate, 48 / 48 with presets, 37 / 37 before) (three consecutive parallel runs), and
+* **Result: 101 / 101 CTest tests passed** (after module power + source type; 93 / 93 after the VineAudio rebrand; 90 / 90 after drum de-bleed; 74 / 74 after the gate, 48 / 48 with presets, 37 / 37 before) (three consecutive parallel runs), and
   again from a **fresh clone configured exactly like the Linux CI job**
   (JUCE/Catch2 fetched from GitHub, engine `-Werror`).
 * Engine + tests also built with **Clang 18 / libc++ with `-Werror`**: all
@@ -114,6 +114,19 @@ Synthetic snare (200 Hz body + noise wires, 90 ms decay) and cymbal (noise,
 What these tests do **not** show: how it sounds on real drums. A real snare's
 wires ring longer than its body and real cymbals overlap the snare's spectrum;
 listening tests are required.
+
+## Module power and source type
+
+| Test | Result |
+|---|---|
+| Defaults: Smart Gain on, gate off, de-bleed off, source Vocal | pass |
+| All modules off: strip output bit-exact to input; Smart Gain on again applies its gain after the fade | pass |
+| Mix Coach wording: drum advice never says vocal/singer/sing; speech says voice | pass |
+| Strip coach: Smart Gain off → only gate advice; kick preset → drum wording, no "words" | pass |
+| Presets set source (Drums → Drum, Speech → Speech, others → Vocal) | pass |
+| Plugin: Smart Gain off = static gain not applied; source not automatable; user preset v4 keeps source + power; v3 files load as Vocal/on | pass |
+| Editor: off modules render as off (screenshots) | pass |
+| Realtime: Smart Gain power toggled in the strip no-allocation test | pass |
 
 ## Plugin adapter tests
 

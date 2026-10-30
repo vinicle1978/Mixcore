@@ -3,6 +3,7 @@
 #include "PluginProcessor.h"
 #include "ui/DrumPanel.h"
 #include "ui/GatePanel.h"
+#include "ui/ModuleUi.h"
 #include "ui/Meters.h"
 #include "ui/Theme.h"
 
@@ -58,6 +59,9 @@ private:
     void updatePresetDisplay();
     juce::Rectangle<int> statusTextArea() const;
     void onPresetChosen();
+    void updateModuleStates(bool force = false);
+    void setParameter(const char* id, float plainValue);
+    gain::SourceType source() const;
     void promptSavePreset();
     void promptDeletePreset();
 
@@ -86,6 +90,17 @@ private:
     juce::TextButton gainTab_ { "Smart Gain" };
     juce::TextButton gateTab_ { "Gate" };
     juce::TextButton drumTab_ { "Drums" };
+    PowerButton gainPower_ { "Smart Gain" };
+    PowerButton gatePower_ { "Gate" };
+    PowerButton drumPower_ { "De-bleed" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> gainPowerAtt_, gatePowerAtt_, drumPowerAtt_;
+    ModuleOffBanner offBanner_;
+    juce::ComboBox sourceBox_;
+    juce::Label sourceLabel_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> sourceAttachment_;
+    bool gainOn_ = true, gateOn_ = false, drumOn_ = false;
+    int lastModuleKey_ = -1;
+    gain::SourceType lastSource_ = static_cast<gain::SourceType>(-1); // forces the first update
     Page page_ = Page::SmartGain;
     GatePanel gatePanel_ { processor_ };
     GateLearnPanel gateLearnPanel_ { processor_ };

@@ -180,6 +180,8 @@ void MixCoreProcessor::applySettingsToParameters(const strip::ChannelSettings& p
             setParam(spec.id, target.gain.*spec.member ? 1.0f : 0.0f);
     applyGateToParameters(target.gate);
     applyDrumToParameters(target.drum);
+    setParam(ids::smartGainOn, target.gainOn ? 1.0f : 0.0f);
+    setParam(ids::sourceType, static_cast<float>(static_cast<int>(target.source)));
 }
 
 void MixCoreProcessor::setCurrentPreset(const juce::String& name, bool isUser, const strip::ChannelSettings& settings)

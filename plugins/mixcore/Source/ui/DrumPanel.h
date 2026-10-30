@@ -12,7 +12,7 @@
 
 namespace mixcore::plugin {
 
-/// Scrolling de-bleed view: body (gold) and high band (champagne) envelopes, and
+/// Scrolling de-bleed view: body (blue) and high band (silver) envelopes, and
 /// the high-band reduction drawn down from the top (red).
 class DebleedHistory final : public juce::Component
 {

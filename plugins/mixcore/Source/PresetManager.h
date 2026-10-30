@@ -8,7 +8,8 @@
 // The same files are shared by every DAW and the standalone app, and can be
 // copied between computers. All calls run on the message thread.
 //
-// File format v2 adds a <Gate> element, v3 a <Drum> element. Older files load
+// File format v2 adds a <Gate> element, v3 a <Drum> element,
+// v4 the source type and Smart Gain on/off (root attributes). Older files load
 // with the missing modules switched off (v1: gate off; v1/v2: de-bleed off).
 // Presets saved before the VineAudio rebrand (…/MixCore/Presets/Smart Gain/)
 // are copied into the new folder once, never overwriting, originals kept.

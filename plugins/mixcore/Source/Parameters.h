@@ -53,6 +53,9 @@ inline constexpr const char* gateTransient = "gateTransient";
 inline constexpr const char* gateTransientDb = "gateTransientDb";
 inline constexpr const char* gateLookahead = "gateLookahead";
 
+inline constexpr const char* smartGainOn = "smartGainOn";
+inline constexpr const char* sourceType = "sourceType";
+
 inline constexpr const char* drumDebleed = "drumDebleed";
 inline constexpr const char* drumDebleedAmount = "drumDebleedAmount";
 inline constexpr const char* drumDebleedCrossover = "drumDebleedCrossover";
@@ -110,13 +113,24 @@ public:
     gain::SmartGainSettings read() const noexcept;
     gate::GateSettings readGate() const noexcept;
     drum::DrumSettings readDrum() const noexcept;
-    strip::ChannelSettings readChannel() const noexcept { return { read(), readGate(), readDrum() }; }
+    strip::ChannelSettings readChannel() const noexcept
+    {
+        strip::ChannelSettings c;
+        c.gainOn = gainOn_->load(std::memory_order_relaxed) >= 0.5f;
+        c.source = gain::sourceFromIndex(static_cast<int>(source_->load(std::memory_order_relaxed) + 0.5f));
+        c.gain = read();
+        c.gate = readGate();
+        c.drum = readDrum();
+        return c;
+    }
 
 private:
     std::vector<std::pair<std::atomic<float>*, float gain::SmartGainSettings::*>> floats_;
     std::vector<std::pair<std::atomic<float>*, bool gain::SmartGainSettings::*>> bools_;
     std::vector<std::pair<std::atomic<float>*, float gate::GateSettings::*>> gateFloats_;
     std::vector<std::pair<std::atomic<float>*, bool gate::GateSettings::*>> gateBools_;
+    std::atomic<float>* gainOn_ = nullptr;
+    std::atomic<float>* source_ = nullptr;
     std::vector<std::pair<std::atomic<float>*, float drum::DrumSettings::*>> drumFloats_;
     std::vector<std::pair<std::atomic<float>*, bool drum::DrumSettings::*>> drumBools_;
 };

@@ -16,9 +16,12 @@ std::string db(float v)
 }
 } // namespace
 
-std::vector<Advice> evaluateSmartGainAdvice(const SmartGainTelemetry& t, const SmartGainSettings& s)
+std::vector<Advice> evaluateSmartGainAdvice(const SmartGainTelemetry& t, const SmartGainSettings& s, SourceType source)
 {
     std::vector<Advice> out;
+    const auto& w = words(source);
+    const std::string noun = w.noun;
+    const bool voice = source == SourceType::Vocal || source == SourceType::Speech;
 
     if (t.inputClipping)
     {
@@ -45,7 +48,7 @@ std::vector<Advice> evaluateSmartGainAdvice(const SmartGainTelemetry& t, const S
     if (active && t.inputRmsDb < -42.0f && t.inputRmsDb > -100.0f)
     {
         out.push_back({ "input-quiet", AdviceSeverity::Warning,
-                        "The vocal input is unusually quiet (" + db(t.inputRmsDb) + "FS RMS).",
+                        "The " + noun + " input is unusually quiet (" + db(t.inputRmsDb) + "FS RMS).",
                         "Large amounts of digital gain also raise the room noise and bleed by the same amount.",
                         "Check the preamp gain before adding large amounts of digital gain.",
                         "Raise the preamp gain, then run calibration again.",
@@ -66,7 +69,7 @@ std::vector<Advice> evaluateSmartGainAdvice(const SmartGainTelemetry& t, const S
         out.push_back({ "peak-warning", AdviceSeverity::Warning,
                         "Output peaks are above the " + db(s.peakWarningDb) + "FS warning level.",
                         "Leaving headroom here protects the mix bus and later processing from overload.",
-                        "Check the static gain and whether the singer gets much louder in some sections.",
+                        "Check the static gain and whether the " + noun + " gets much louder in some sections.",
                         "Lower the static gain slightly, or enable the peak guard if occasional peaks are expected.",
                         false, "No automatic change." });
     }
@@ -75,8 +78,9 @@ std::vector<Advice> evaluateSmartGainAdvice(const SmartGainTelemetry& t, const S
     {
         out.push_back({ "rider-restricted", AdviceSeverity::Info,
                         "The rider wants " + db(t.riderRestrictionDb) + " more gain but peak safety is holding it back.",
-                        "The vocal has loud peaks relative to its average level (high crest factor).",
-                        "Check for plosives or mic handling noise; a high-pass filter or pop filter often helps.",
+                        "The " + noun + " has loud peaks relative to its average level (high crest factor).",
+                        voice ? "Check for plosives or mic handling noise; a high-pass filter or pop filter often helps."
+                              : "Short, loud peaks are normal for this source; check mic placement if it seems excessive.",
                         "Accept the restriction, or reduce peaks upstream before raising the target.",
                         true, "The rider is automatically limiting its own upward gain." });
     }
@@ -85,9 +89,10 @@ std::vector<Advice> evaluateSmartGainAdvice(const SmartGainTelemetry& t, const S
         && t.riderGainDb >= std::min(s.riderMaxUpDb, s.riderRangeDb) - 0.25f)
     {
         out.push_back({ "below-target", AdviceSeverity::Info,
-                        "The vocal is active, but its average level remains " + db(t.targetErrorDb) + " below the target.",
+                        "The " + noun + " is active, but its average level remains " + db(t.targetErrorDb) + " below the target.",
                         "The rider is already at its maximum upward correction, so it cannot close the gap.",
-                        "Check that static gain has been calibrated for this singer.",
+                        voice ? "Check that static gain has been calibrated for this " + std::string(source == SourceType::Vocal ? "singer." : "speaker.")
+                              : "Check that static gain has been calibrated for this source.",
                         "Run calibration, or raise static gain manually.",
                         false, "The rider is at its limit; static gain is never changed automatically." });
     }
@@ -95,19 +100,19 @@ std::vector<Advice> evaluateSmartGainAdvice(const SmartGainTelemetry& t, const S
     if (!active && t.noiseFloorDb > -50.0f && t.noiseFloorDb > -149.0f)
     {
         out.push_back({ "high-noise-floor", AdviceSeverity::Warning,
-                        "The background level between phrases is high (" + db(t.noiseFloorDb) + "FS).",
+                        "The background level " + std::string(w.gaps) + " is high (" + db(t.noiseFloorDb) + "FS).",
                         "A high noise floor makes activity detection less reliable and adds noise to the mix.",
                         "Check for monitor spill, fans, or a gain setting that is far too high.",
                         "Reduce spill or noise at the source; consider a gate after MixCore.",
-                        false, "The rider freezes while no vocal is detected, so it will not boost the noise." });
+                        false, "The rider freezes while no " + noun + " is detected, so it will not boost the noise." });
     }
 
     if (t.calibration == CalibrationState::Collecting)
     {
         out.push_back({ "calibrating", AdviceSeverity::Info,
-                        "Calibration is listening for active vocal.",
+                        "Calibration is listening for the active " + noun + ".",
                         "Static gain is set from a representative performance level, not a single peak.",
-                        "Sing or speak at the level you will use in the performance.",
+                        std::string(w.perform) + " at the level you will use in the performance.",
                         "Keep going until the progress bar is full.",
                         false, "Nothing is applied until you confirm the result." });
     }

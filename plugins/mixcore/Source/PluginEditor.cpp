@@ -10,16 +10,29 @@ constexpr int kWidth = 1000;
 constexpr int kHeight = 640;
 constexpr int kTimerHz = 30;
 
-juce::String activityText(gain::ActivityState a)
+juce::String activityText(gain::ActivityState a, gain::SourceType source, bool riderOn)
 {
+    const auto& w = gain::words(source);
+    const juce::String noun = juce::String(w.noun).toUpperCase();
     switch (a)
     {
-        case gain::ActivityState::Active: return "VOCAL ACTIVE  -  riding";
-        case gain::ActivityState::Hold: return "PHRASE END  -  holding";
+        case gain::ActivityState::Active: return noun + " ACTIVE" + (riderOn ? "  -  riding" : "");
+        case gain::ActivityState::Hold: return juce::String(w.tail) + (riderOn ? "  -  holding" : "");
         case gain::ActivityState::Confirming: return "CONFIRMING";
         case gain::ActivityState::Inactive: break;
     }
-    return "NO VOCAL  -  rider frozen";
+    return "NO " + noun + (riderOn ? "  -  rider frozen" : "");
+}
+
+void setChipOff(juce::Label& chip, bool off, juce::Colour onOutline)
+{
+    chip.setColour(juce::Label::outlineColourId, off ? theme::panelEdge : onOutline.withAlpha(0.35f));
+    chip.setColour(juce::Label::backgroundColourId, off ? theme::background : theme::panel);
+    if (off)
+    {
+        chip.setText("OFF", juce::dontSendNotification);
+        chip.setColour(juce::Label::textColourId, theme::muted.withAlpha(0.55f));
+    }
 }
 
 juce::Colour activityColour(gain::ActivityState a)
@@ -94,7 +107,7 @@ MixCoreEditor::MixCoreEditor(MixCoreProcessor& p) : AudioProcessorEditor(&p), pr
         addAndMakeVisible(*l);
     }
     inputMeter_.setTooltip("Input level before MixCore. Bar = 400 ms RMS, line = sample peak.");
-    outputMeter_.setTooltip("Output level. The gold marker is your target RMS.");
+    outputMeter_.setTooltip("Output level. The silver marker is your target RMS.");
 
     // Status
     activityLabel_.setFont(theme::font(13.0f, true));
@@ -106,7 +119,7 @@ MixCoreEditor::MixCoreEditor(MixCoreProcessor& p) : AudioProcessorEditor(&p), pr
     staticChip_.setTooltip("Static gain: set once (manually or by calibration). Never changed automatically.");
     riderChip_.setTooltip("Rider gain: slow automatic correction while the vocal is active.");
     guardChip_.setTooltip("Peak guard reduction: safety intervention, reported separately from riding.");
-    styleChip(debleedChip_, theme::goldLight);
+    styleChip(debleedChip_, theme::blueLight);
     debleedChip_.setTooltip("Drum de-bleed: high-band bleed reduction (after Smart Gain, before the gate). Click to open the Drums page.");
     styleChip(gateChip_, theme::good);
     gateChip_.setTooltip("Gate: gain reduction applied after Smart Gain. Click to open the Gate page.");
@@ -119,8 +132,8 @@ MixCoreEditor::MixCoreEditor(MixCoreProcessor& p) : AudioProcessorEditor(&p), pr
     {
         tab->setClickingTogglesState(true);
         tab->setRadioGroupId(4711);
-        tab->setColour(juce::TextButton::buttonOnColourId, theme::gold);
-        tab->setColour(juce::TextButton::textColourOnId, theme::background);
+        tab->setColour(juce::TextButton::buttonOnColourId, theme::blue);
+        tab->setColour(juce::TextButton::textColourOnId, theme::text);
         addAndMakeVisible(*tab);
     }
     gainTab_.setTooltip("Smart Gain: static gain, rider and peak safety.");
@@ -133,6 +146,30 @@ MixCoreEditor::MixCoreEditor(MixCoreProcessor& p) : AudioProcessorEditor(&p), pr
     addChildComponent(drumPanel_);
     styleReadout(drumInfoText_);
     addChildComponent(drumInfoText_);
+
+    // Module power: one switch per module, on its tab. Only Smart Gain is on by default.
+    gainPowerAtt_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(apvts, ids::smartGainOn, gainPower_);
+    gatePowerAtt_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(apvts, ids::gateEnabled, gatePower_);
+    drumPowerAtt_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(apvts, ids::drumDebleed, drumPower_);
+    for (auto* b : { &gainPower_, &gatePower_, &drumPower_ })
+        addAndMakeVisible(*b);
+    offBanner_.onTurnOn = [this] {
+        setParameter(page_ == Page::SmartGain ? ids::smartGainOn : page_ == Page::Gate ? ids::gateEnabled : ids::drumDebleed, 1.0f);
+    };
+    addChildComponent(offBanner_);
+
+    // Source type: changes wording (Mix Coach, status), not processing.
+    for (int i = 0; i < gain::kNumSourceTypes; ++i)
+        sourceBox_.addItem(gain::words(gain::sourceFromIndex(i)).name, i + 1);
+    sourceBox_.setTooltip("What this channel carries (vocal, speech, drum, instrument). Presets set it; it changes how "
+                          "MixCore describes what it hears, not the processing.");
+    sourceAttachment_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(apvts, ids::sourceType, sourceBox_);
+    addAndMakeVisible(sourceBox_);
+    sourceLabel_.setText("Source", juce::dontSendNotification);
+    sourceLabel_.setFont(theme::font(12.0f, true));
+    sourceLabel_.setColour(juce::Label::textColourId, theme::label);
+    sourceLabel_.setJustificationType(juce::Justification::centredRight);
+    addAndMakeVisible(sourceLabel_);
     gainTab_.setToggleState(true, juce::dontSendNotification);
     gateChip_.addMouseListener(this, false);
     addChildComponent(gatePanel_);
@@ -223,9 +260,9 @@ void MixCoreEditor::addKnob(Knob& knob, const char* paramId, const juce::String&
     knob.slider.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
     knob.slider.setTooltip(tooltip);
     knob.label.setText(caption, juce::dontSendNotification);
-    knob.label.setFont(theme::font(11.5f, true));
+    knob.label.setFont(theme::font(12.5f, true));
     knob.label.setJustificationType(juce::Justification::centred);
-    knob.label.setColour(juce::Label::textColourId, theme::muted);
+    knob.label.setColour(juce::Label::textColourId, theme::label);
     knob.attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor_.state(), paramId, knob.slider);
     addAndMakeVisible(knob.slider);
     addAndMakeVisible(knob.label);
@@ -241,7 +278,7 @@ void MixCoreEditor::setAdvanced(bool advanced)
 
 juce::Rectangle<int> MixCoreEditor::statusTextArea() const
 {
-    return gainTab_.getBounds().withLeft(drumTab_.getRight() + 8).withRight(activityLabel_.getRight());
+    return activityLabel_.getBounds().withTrimmedLeft(activityLabel_.getWidth() / 2); // right half of the status row
 }
 
 void MixCoreEditor::setPage(Page page)
@@ -283,6 +320,7 @@ void MixCoreEditor::setPage(Page page)
     gateLearnPanel_.setVisible(gatePage);
     if (gainPage)
         updateCalibrationUi();
+    updateModuleStates(true);
     resized();
     repaint();
 }
@@ -294,7 +332,7 @@ void MixCoreEditor::paint(juce::Graphics& g)
                                            static_cast<float>(getHeight()) * 0.6f, false));
     g.fillAll();
 
-    // Header: VineAudio logo, product name, thin gold rule underneath.
+    // Header: VineAudio logo, product name, thin blue/silver rule underneath.
     auto header = getLocalBounds().removeFromTop(52).reduced(18, 0);
     if (const auto logo = theme::logoImage(); logo.isValid())
     {
@@ -304,18 +342,18 @@ void MixCoreEditor::paint(juce::Graphics& g)
                     juce::RectanglePlacement::centred);
         header.removeFromLeft(static_cast<int>(w) + 14);
     }
-    g.setColour(theme::gold.withAlpha(0.5f));
+    g.setColour(theme::silver.withAlpha(0.5f));
     g.fillRect(header.getX(), header.getCentreY() - 11, 1, 22);
     header.removeFromLeft(12);
     g.setColour(theme::text);
     g.setFont(theme::font(20.0f, true));
     g.drawText("MixCore", header.removeFromLeft(90), juce::Justification::centredLeft);
     {
-        juce::ColourGradient rule(theme::gold.withAlpha(0.0f), 0.0f, 52.0f, theme::gold.withAlpha(0.0f),
+        juce::ColourGradient rule(theme::blue.withAlpha(0.0f), 0.0f, 52.0f, theme::blue.withAlpha(0.0f),
                                   static_cast<float>(getWidth()), 52.0f, false);
-        rule.addColour(0.15, theme::goldShadow);
-        rule.addColour(0.5, theme::goldHighlight.withAlpha(0.8f));
-        rule.addColour(0.85, theme::goldShadow);
+        rule.addColour(0.15, theme::blueDeep);
+        rule.addColour(0.5, theme::silverHighlight.withAlpha(0.85f));
+        rule.addColour(0.85, theme::blueDeep);
         g.setGradientFill(rule);
         g.fillRect(0, 51, getWidth(), 1);
     }
@@ -333,13 +371,17 @@ void MixCoreEditor::paint(juce::Graphics& g)
                     juce::Rectangle<int>(getWidth() - 352, 60, 340, getHeight() - 72) })
         theme::fillPanel(g, r.toFloat());
 
-    g.setColour(theme::muted);
-    g.setFont(theme::font(11.0f, true));
-    g.drawText("STATIC", staticChip_.getBounds().translated(0, -16).withHeight(14), juce::Justification::centred);
-    g.drawText("RIDER", riderChip_.getBounds().translated(0, -16).withHeight(14), juce::Justification::centred);
-    g.drawText("PEAK GUARD", guardChip_.getBounds().translated(0, -16).withHeight(14), juce::Justification::centred);
-    g.drawText("DE-BLEED", debleedChip_.getBounds().translated(0, -16).withHeight(14), juce::Justification::centred);
-    g.drawText("GATE", gateChip_.getBounds().translated(0, -16).withHeight(14), juce::Justification::centred);
+    g.setFont(theme::font(11.5f, true));
+    const auto chipLabel = [&](const char* text, const juce::Label& chip, bool on) {
+        g.setColour(on ? theme::label : theme::muted.withAlpha(0.5f));
+        g.drawText(text, chip.getBounds().translated(0, -16).withHeight(14), juce::Justification::centred);
+    };
+    chipLabel("STATIC", staticChip_, gainOn_);
+    chipLabel("RIDER", riderChip_, gainOn_);
+    chipLabel("PEAK GUARD", guardChip_, gainOn_);
+    chipLabel("DE-BLEED", debleedChip_, drumOn_);
+    chipLabel("GATE", gateChip_, gateOn_);
+    g.setColour(theme::label);
     g.drawText(page_ == Page::Gate ? "GATE THRESHOLD" : page_ == Page::Drums ? "DE-BLEED" : "CALIBRATION", juce::Rectangle<int>(getWidth() - 340, 66, 200, 16),
                juce::Justification::centredLeft);
     g.drawText("MIX COACH", coachText_.getBounds().translated(0, -20).withHeight(16), juce::Justification::centredLeft);
@@ -363,7 +405,11 @@ void MixCoreEditor::resized()
     header.removeFromRight(8);
     advancedButton_.setBounds(header.removeFromRight(96));
     header.removeFromLeft(262); // logo + product name
-    presetBox_.setBounds(header.removeFromLeft(juce::jmin(300, header.getWidth() - 160)));
+    header.removeFromRight(10);
+    sourceBox_.setBounds(header.removeFromRight(112));
+    sourceLabel_.setBounds(header.removeFromRight(52));
+    header.removeFromRight(6);
+    presetBox_.setBounds(header.removeFromLeft(juce::jmax(140, header.getWidth() - 62 - 70 - 12)));
     header.removeFromLeft(6);
     savePresetButton_.setBounds(header.removeFromLeft(62));
     header.removeFromLeft(6);
@@ -404,11 +450,17 @@ void MixCoreEditor::resized()
     // Centre
     auto centre = area.reduced(16, 8);
     auto tabs = centre.removeFromTop(26);
-    gainTab_.setBounds(tabs.removeFromLeft(110));
-    tabs.removeFromLeft(4);
-    gateTab_.setBounds(tabs.removeFromLeft(80));
-    tabs.removeFromLeft(4);
-    drumTab_.setBounds(tabs.removeFromLeft(80));
+    gainPower_.setBounds(tabs.removeFromLeft(26));
+    tabs.removeFromLeft(2);
+    gainTab_.setBounds(tabs.removeFromLeft(104));
+    tabs.removeFromLeft(8);
+    gatePower_.setBounds(tabs.removeFromLeft(26));
+    tabs.removeFromLeft(2);
+    gateTab_.setBounds(tabs.removeFromLeft(70));
+    tabs.removeFromLeft(8);
+    drumPower_.setBounds(tabs.removeFromLeft(26));
+    tabs.removeFromLeft(2);
+    drumTab_.setBounds(tabs.removeFromLeft(74));
     centre.removeFromTop(4);
     activityLabel_.setBounds(centre.removeFromTop(20));
     centre.removeFromTop(16);
@@ -424,6 +476,7 @@ void MixCoreEditor::resized()
     centre.removeFromTop(10);
 
     gatePanel_.setBounds(centre);
+    offBanner_.setBounds(centre.withHeight(54));
     drumPanel_.setBounds(centre);
 
     if (!advanced_)
@@ -475,6 +528,62 @@ void MixCoreEditor::resized()
 
 void MixCoreEditor::timerCallback() { refresh(); }
 
+gain::SourceType MixCoreEditor::source() const { return processor_.currentChannelSettings().source; }
+
+void MixCoreEditor::setParameter(const char* id, float plainValue)
+{
+    if (auto* p = processor_.state().getParameter(id))
+    {
+        p->beginChangeGesture();
+        p->setValueNotifyingHost(p->convertTo0to1(plainValue));
+        p->endChangeGesture();
+    }
+}
+
+void MixCoreEditor::updateModuleStates(bool force)
+{
+    const auto c = processor_.currentChannelSettings();
+    gainOn_ = c.gainOn;
+    gateOn_ = c.gate.enabled;
+    drumOn_ = c.drum.debleedEnabled;
+    const int key = (gainOn_ ? 1 : 0) | (gateOn_ ? 2 : 0) | (drumOn_ ? 4 : 0) | (static_cast<int>(page_) << 3)
+                    | (advanced_ ? 64 : 0);
+    if (!force && key == lastModuleKey_)
+        return;
+    lastModuleKey_ = key;
+
+    // Off modules: dimmed page content, dim tab text, banner on their page.
+    constexpr float dim = 0.38f;
+    const float gainAlpha = gainOn_ ? 1.0f : dim;
+    for (juce::Component* comp : { static_cast<juce::Component*>(&history_), static_cast<juce::Component*>(&riderToggle_),
+                                   static_cast<juce::Component*>(&guardToggle_) })
+        comp->setAlpha(gainAlpha);
+    for (auto* k : { &target_, &staticGain_, &strength_ })
+    {
+        k->slider.setAlpha(gainAlpha);
+        k->label.setAlpha(gainAlpha);
+    }
+    for (auto& k : advancedKnobs_)
+    {
+        k->slider.setAlpha(gainAlpha);
+        k->label.setAlpha(gainAlpha);
+    }
+    gatePanel_.setAlpha(gateOn_ ? 1.0f : dim);
+    drumPanel_.setAlpha(drumOn_ ? 1.0f : dim);
+
+    gainTab_.setColour(juce::TextButton::textColourOffId, gainOn_ ? theme::text : theme::muted.withAlpha(0.6f));
+    gateTab_.setColour(juce::TextButton::textColourOffId, gateOn_ ? theme::text : theme::muted.withAlpha(0.6f));
+    drumTab_.setColour(juce::TextButton::textColourOffId, drumOn_ ? theme::text : theme::muted.withAlpha(0.6f));
+
+    const bool pageOff = (page_ == Page::SmartGain && !gainOn_) || (page_ == Page::Gate && !gateOn_)
+                         || (page_ == Page::Drums && !drumOn_);
+    offBanner_.setModule(page_ == Page::SmartGain ? "Smart Gain" : page_ == Page::Gate ? "Gate" : "De-bleed");
+    offBanner_.setVisible(pageOff);
+    if (pageOff)
+        offBanner_.toFront(false);
+    repaint();
+}
+
 void MixCoreEditor::refresh()
 {
     const bool fresh = processor_.readTelemetry(telemetry_);
@@ -504,7 +613,7 @@ void MixCoreEditor::refresh()
     {
         debleedChip_.setText(drumT.reductionDb < 0.5f ? "clean" : "-" + juce::String(drumT.reductionDb, 1) + " dB",
                              juce::dontSendNotification);
-        debleedChip_.setColour(juce::Label::textColourId, theme::goldLight);
+        debleedChip_.setColour(juce::Label::textColourId, theme::blueLight);
     }
     if (page_ == Page::Gate)
         gateLearnPanel_.update(gt.learnProgress);
@@ -532,8 +641,18 @@ void MixCoreEditor::refresh()
     outputReadout_.setText("RMS " + theme::formatDb(gt.outputRmsDb, 1, false) + "\nTP " + theme::formatDb(t.outputTruePeakDb, 1, false),
                            juce::dontSendNotification);
 
-    activityLabel_.setText(t.bypassed ? "BYPASSED" : activityText(t.activity), juce::dontSendNotification);
-    activityLabel_.setColour(juce::Label::textColourId, t.bypassed ? theme::safety : activityColour(t.activity));
+    updateModuleStates();
+    const auto src = source();
+    if (!gainOn_)
+    {
+        activityLabel_.setText("SMART GAIN OFF  -  meters only", juce::dontSendNotification);
+        activityLabel_.setColour(juce::Label::textColourId, theme::muted);
+    }
+    else
+    {
+        activityLabel_.setText(t.bypassed ? "BYPASSED" : activityText(t.activity, src, t.riderEnabled), juce::dontSendNotification);
+        activityLabel_.setColour(juce::Label::textColourId, t.bypassed ? theme::safety : activityColour(t.activity));
+    }
 
     staticChip_.setText(theme::formatDb(t.staticGainDb) + " dB", juce::dontSendNotification);
     juce::String riderText = t.riderEnabled ? theme::formatDb(t.riderGainDb) + " dB" : "off";
@@ -542,6 +661,14 @@ void MixCoreEditor::refresh()
     riderChip_.setText(riderText, juce::dontSendNotification);
     guardChip_.setText(!t.peakGuardEnabled ? "off" : (t.peakGuardActive ? "-" + juce::String(t.peakGuardReductionDb, 1) + " dB" : "ready"),
                        juce::dontSendNotification);
+    // Red only while the guard is actually reducing; otherwise neutral.
+    guardChip_.setColour(juce::Label::textColourId, t.peakGuardActive ? theme::safety : t.peakGuardEnabled ? theme::rider : theme::muted);
+    staticChip_.setColour(juce::Label::textColourId, theme::level);
+    riderChip_.setColour(juce::Label::textColourId, theme::rider);
+    for (auto* c : { &staticChip_, &riderChip_, &guardChip_ })
+        setChipOff(*c, !gainOn_, c == &guardChip_ ? theme::safety : c == &staticChip_ ? theme::level : theme::rider);
+    setChipOff(gateChip_, !gt.enabled, theme::good);
+    setChipOff(debleedChip_, !drumT.enabled, theme::blueLight);
 
     if (page_ == Page::SmartGain)
         updateCalibrationUi();
@@ -581,14 +708,16 @@ void MixCoreEditor::updateCalibrationUi()
         {
             case gain::CalibrationState::Requested:
             case gain::CalibrationState::Collecting:
-                calibrationText_.setText("Listening... sing or speak at your performance level. "
-                                         "Only active vocal is measured; pauses are ignored.",
+                calibrationText_.setText("Listening... " + juce::String(gain::words(source()).perform).toLowerCase()
+                                             + " at your performance level. Only the active " + gain::words(source()).noun
+                                             + " is measured; pauses are ignored.",
                                          false);
                 break;
             case gain::CalibrationState::Idle:
                 if (!lastResult_.valid)
-                    calibrationText_.setText("Calibration measures the typical level of your vocal and suggests a static gain "
-                                             "that brings it to the target. Nothing changes until you apply it.",
+                    calibrationText_.setText("Calibration measures the typical level of your " + juce::String(gain::words(source()).noun)
+                                                 + " and suggests a static gain that brings it to the target. Nothing changes "
+                                                   "until you apply it.",
                                              false);
                 break;
             case gain::CalibrationState::Ready:
@@ -596,11 +725,22 @@ void MixCoreEditor::updateCalibrationUi()
                 break;
         }
     }
+    // Source type changed (e.g. a drum preset): refresh the idle wording.
+    if (source() != lastSource_)
+    {
+        lastSource_ = source();
+        if (state == gain::CalibrationState::Idle && !lastResult_.valid)
+            calibrationText_.setText("Calibration measures the typical level of your " + juce::String(gain::words(lastSource_).noun)
+                                         + " and suggests a static gain that brings it to the target. Nothing changes until "
+                                           "you apply it.",
+                                     false);
+    }
     lastCalState_ = state;
 
     const bool running = state == gain::CalibrationState::Requested || state == gain::CalibrationState::Collecting;
-    calibrateButton_.setEnabled(!running);
-    calibrateButton_.setButtonText(lastResult_.valid ? "Recalibrate" : "Calibrate (6 s of singing)");
+    calibrateButton_.setButtonText(lastResult_.valid ? "Recalibrate"
+                                                     : "Calibrate (6 s of " + juce::String(gain::words(source()).performing) + ")");
+    calibrateButton_.setEnabled(!running && gainOn_);
     cancelCalButton_.setEnabled(running || lastResult_.valid);
     applyButton_.setEnabled(lastResult_.valid && !running);
     applySafeButton_.setVisible(lastResult_.valid && lastResult_.peakConflict);
@@ -609,9 +749,11 @@ void MixCoreEditor::updateCalibrationUi()
 
 void MixCoreEditor::updateCoach(const gain::SmartGainTelemetry& t)
 {
-    const auto advice = strip::evaluateStripAdvice(t, gateTelemetry_, processor_.currentChannelSettings());
+    const auto channel = processor_.currentChannelSettings();
+    const auto advice = strip::evaluateStripAdvice(t, gateTelemetry_, channel);
 
     juce::String key;
+    key << static_cast<int>(channel.source) << (channel.gainOn ? "|on|" : "|off|");
     for (const auto& a : advice)
         key << a.id << ";";
     if (key == lastCoachKey_ && !key.containsIgnoreCase("peak-guard") && !key.containsIgnoreCase("below-target"))
@@ -626,8 +768,20 @@ void MixCoreEditor::updateCoach(const gain::SmartGainTelemetry& t)
         coachText_.insertTextAtCaret("All clear.\n");
         coachText_.setColour(juce::TextEditor::textColourId, theme::muted);
         coachText_.setFont(theme::font(12.5f));
-        coachText_.insertTextAtCaret("No gain-staging problems detected. Calibrate once per singer, then let the rider handle "
-                                     "phrase-to-phrase changes.");
+        const auto src = channel.source;
+        juce::String tip;
+        if (!channel.gainOn)
+            tip = "Smart Gain is off, so gain staging is not being checked. Switch it on with the power button on its tab.";
+        else if (src == gain::SourceType::Vocal)
+            tip = "No gain-staging problems detected. Calibrate once per singer, then let the rider handle phrase-to-phrase changes.";
+        else if (src == gain::SourceType::Speech)
+            tip = "No gain-staging problems detected. Calibrate once per speaker, then let the rider handle sentence-to-sentence changes.";
+        else if (src == gain::SourceType::Drum)
+            tip = "No gain-staging problems detected. Calibrate once per drum and mic position; drum presets leave the rider off "
+                  "so the drum's natural dynamics are kept.";
+        else
+            tip = "No gain-staging problems detected. Calibrate once per instrument and mic position.";
+        coachText_.insertTextAtCaret(tip);
         return;
     }
 

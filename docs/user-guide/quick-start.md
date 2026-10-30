@@ -41,11 +41,11 @@ You can always set **Static gain** by hand instead.
   values 3 dB different. Treat −18 as a starting point.
 * **Strength** (default 0.5): how much of the difference the rider corrects.
   0.5 corrects about half — natural sounding. 1.0 corrects fully (up to +4/−6 dB).
-* The rider only moves while vocal is detected (gold **VOCAL ACTIVE**). In
+* The rider only moves while vocal is detected (blue **VOCAL ACTIVE**). In
   pauses it freezes; after ~2 s of silence any boost slowly returns to 0 dB so
   room noise is not left turned up.
-* The graph shows the last 20 s of rider gain (champagne white), peak-guard action (red)
-  and vocal activity (gold band).
+* The graph shows the last 20 s of rider gain (silver white), peak-guard action (red)
+  and vocal activity (blue band).
 
 ## 6. Peak safety
 
@@ -61,6 +61,24 @@ Open the **Gate** tab. Pick a profile, press **Learn threshold** while the
 source plays with its natural gaps, then **Apply threshold**. Drum presets
 switch the gate on for you; vocal presets leave it off until you learn and
 apply. Details: [presets.md](presets.md#the-gate).
+
+## Modules on and off
+
+Each module has a **power button** on its tab: Smart Gain, Gate, Drums
+(de-bleed). A fresh MixCore has **only Smart Gain on**; switch the others on
+when a track needs them. Drum presets switch on the gate (and de-bleed for
+snare and toms) because that is what those presets are for.
+
+A module that is off is **not processing**: the audio passes through untouched.
+You can see it at a glance: its power button is grey, its tab text is dimmed,
+its box in the signal chain reads **OFF**, and its page is dimmed with an
+"IS OFF" banner and a **Turn on** button. You can still adjust its settings
+while it is off.
+
+**Source** (top right: Vocal, Speech, Drum, Instrument) tells MixCore what the
+channel carries, so the Mix Coach and status talk about "the drum" and "between
+hits" on a kick instead of "the vocal". Presets set it; it does not change the
+processing.
 
 ## 8. Drums: de-bleed (optional)
 

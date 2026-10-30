@@ -44,6 +44,10 @@ std::vector<ChannelPreset> build()
         p.category = g.category;
         p.description = g.description;
         p.settings.gain = g.settings;
+        p.settings.gainOn = true;
+        p.settings.source = g.category == "Drums" ? gain::SourceType::Drum
+                            : g.category == "Speech" ? gain::SourceType::Speech
+                                                     : gain::SourceType::Vocal;
         for (const auto& [gainName, gateChoice] : kGateFor)
         {
             if (g.name == gainName)
@@ -99,6 +103,8 @@ ChannelSettings applyChannelPreset(const ChannelSettings& current, const Channel
 {
     ChannelSettings s;
     s.gain = gain::applyPreset(current.gain, preset.gain);
+    s.gainOn = preset.gainOn;
+    s.source = preset.source;
     s.gate = preset.gate;
     s.drum = preset.drum;
     s.validate();
@@ -107,7 +113,8 @@ ChannelSettings applyChannelPreset(const ChannelSettings& current, const Channel
 
 bool matchesChannelPreset(const ChannelSettings& current, const ChannelSettings& preset, float tolerance)
 {
-    return gain::matchesPreset(current.gain, preset.gain, tolerance)
+    return current.gainOn == preset.gainOn && current.source == preset.source
+           && gain::matchesPreset(current.gain, preset.gain, tolerance)
            && gate::gateSettingsMatch(current.gate, preset.gate, tolerance)
            && drumSettingsMatch(current.drum, preset.drum, tolerance);
 }

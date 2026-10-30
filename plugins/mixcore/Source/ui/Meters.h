@@ -43,7 +43,7 @@ public:
         auto bar = area.reduced(area.getWidth() * 0.28f, 2.0f);
         g.setColour(juce::Colours::black);
         g.fillRoundedRectangle(bar, 3.0f);
-        g.setColour(theme::gold.withAlpha(0.18f));
+        g.setColour(theme::silver.withAlpha(0.2f));
         g.drawRoundedRectangle(bar, 3.0f, 1.0f);
 
         auto yFor = [&](float db) {
@@ -51,22 +51,29 @@ public:
             return bar.getBottom() - n * bar.getHeight();
         };
 
-        // RMS bar: metallic gold, with the part above the warning level in red.
+        // RMS bar: metallic blue; the part above the warning level is orange,
+        // and the top 1 dB (about to clip) is red.
         const float top = yFor(rmsDb_);
         if (top < bar.getBottom())
         {
-            g.setGradientFill(theme::goldGradient(bar));
+            g.setGradientFill(theme::blueGradient(bar));
             g.fillRoundedRectangle(bar.withTop(top), 2.0f);
             const float warnY = yFor(warningDb_);
             if (top < warnY)
             {
-                g.setGradientFill(theme::redGradient(bar.withBottom(warnY)));
+                g.setGradientFill(theme::orangeGradient(bar.withBottom(warnY)));
                 g.fillRoundedRectangle(bar.withTop(top).withBottom(warnY), 2.0f);
+            }
+            const float clipY = yFor(-1.0f);
+            if (top < clipY)
+            {
+                g.setGradientFill(theme::redGradient(bar.withBottom(clipY)));
+                g.fillRoundedRectangle(bar.withTop(top).withBottom(clipY), 2.0f);
             }
         }
 
         // Peak hold.
-        g.setColour(peakHoldDb_ > warningDb_ ? theme::safety : theme::text);
+        g.setColour(peakHoldDb_ > -1.0f ? theme::safety : peakHoldDb_ > warningDb_ ? theme::warning : theme::text);
         g.fillRect(bar.getX(), yFor(peakHoldDb_) - 1.0f, bar.getWidth(), 2.0f);
 
         // Target marker.
@@ -110,8 +117,8 @@ private:
     bool alert_ = false;
 };
 
-/// Scrolling history of rider gain (champagne line), guard reduction (red) and
-/// vocal activity (gold band), so users can see what the rider did and why.
+/// Scrolling history of rider gain (silver line), guard reduction (red) and
+/// vocal activity (blue band), so users can see what the rider did and why.
 class GainHistory final : public juce::Component
 {
 public:

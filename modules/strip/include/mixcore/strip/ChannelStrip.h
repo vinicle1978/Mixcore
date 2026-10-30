@@ -14,6 +14,7 @@
 //            by exactly the reported latency.
 
 #include "mixcore/gain/SmartGainStage.h"
+#include "mixcore/gain/SourceType.h"
 #include "mixcore/drum/DeBleed.h"
 #include "mixcore/gate/NoiseGate.h"
 
@@ -23,6 +24,12 @@ namespace mixcore::strip {
 
 struct ChannelSettings
 {
+    /// Module power: Smart Gain is on by default; gate and de-bleed carry their
+    /// own `enabled` flags (off by default). A module that is off passes audio
+    /// through untouched (crossfaded over 10 ms).
+    bool gainOn = true;
+    /// What this channel carries; changes wording (Mix Coach, status), not DSP.
+    gain::SourceType source = gain::SourceType::Vocal;
     gain::SmartGainSettings gain;
     gate::GateSettings gate;
     drum::DrumSettings drum;
@@ -55,7 +62,9 @@ public:
     /// Realtime-safe.
     void setSettings(const ChannelSettings& s) noexcept
     {
-        gain_.setSettings(s.gain);
+        auto g = s.gain;
+        g.bypass = s.gain.bypass || !s.gainOn; // module off = Smart Gain's own latency-matched bypass
+        gain_.setSettings(g);
         drum_.setBypassed(s.gain.bypass);
         drum_.setSettings(s.drum);
         gate_.setBypassed(s.gain.bypass);

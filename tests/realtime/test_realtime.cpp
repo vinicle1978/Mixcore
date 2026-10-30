@@ -146,6 +146,7 @@ TEST_CASE("The full channel strip (Smart Gain + De-bleed + Gate) never allocates
         s.gate.enabled = (block / 97) % 3 != 0;
         s.gate.sidechainLpfHz = 2000.0f + static_cast<float>(block % 7) * 500.0f; // filter redesigns
         s.gain.bypass = (block / 211) % 4 == 3;
+        s.gainOn = (block / 173) % 5 != 2; // Smart Gain module power
         s.drum.debleedEnabled = (block / 53) % 3 != 1;
         s.drum.debleedCrossoverHz = 3000.0f + static_cast<float>(block % 5) * 1000.0f; // crossover redesigns
         if (block == 400)

@@ -65,9 +65,9 @@ GatePanel::GatePanel(MixCoreProcessor& processor) : processor_(processor)
         k.slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
         k.slider.setTooltip(tip);
         k.label.setText(juce::String(spec.name).fromFirstOccurrenceOf("Gate ", false, false), juce::dontSendNotification);
-        k.label.setFont(theme::font(11.0f, true));
+        k.label.setFont(theme::font(12.0f, true));
         k.label.setJustificationType(juce::Justification::centred);
-        k.label.setColour(juce::Label::textColourId, theme::muted);
+        k.label.setColour(juce::Label::textColourId, theme::label);
         k.attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, spec.id, k.slider);
         addChildComponent(k.slider);
         addChildComponent(k.label);
@@ -92,9 +92,9 @@ GatePanel::Knob& GatePanel::addKnob(const char* id, const juce::String& caption,
     k.slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     k.slider.setTooltip(tooltip);
     k.label.setText(caption, juce::dontSendNotification);
-    k.label.setFont(theme::font(11.5f, true));
+    k.label.setFont(theme::font(12.5f, true));
     k.label.setJustificationType(juce::Justification::centred);
-    k.label.setColour(juce::Label::textColourId, theme::muted);
+    k.label.setColour(juce::Label::textColourId, theme::label);
     k.attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor_.state(), id, k.slider);
     addAndMakeVisible(k.slider);
     addAndMakeVisible(k.label);

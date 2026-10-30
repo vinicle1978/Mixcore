@@ -156,12 +156,27 @@ AU manufacturer code `Vnau` (plugin code `Mxcr` unchanged). Plugin, binaries and
 installer file names stay "MixCore". Presets move to
 `…/VineAudio/MixCore/Presets/`; presets in the old `…/MixCore/Presets/Smart Gain/`
 folder are copied over automatically the first time (originals left in place).
-UI palette: black, white, VineAudio gold (sampled from the logo: #CF9156 mean,
-#FDDE9F highlight, #72401D shadow) and red, with gold gradients; red stays
-reserved for problems and safety intervention.
+UI palette (revised after first look): shades of blue with gradients and
+silver; white text, bright silver labels for legibility. Orange marks hot levels
+(above the warning level), red marks clipping, safety intervention and gain
+reduction. The logo is shown recoloured silver-blue (original gold artwork in
+git history).
 **Why:** user's brand decision before any public release. Changing the
 manufacturer code makes DAWs treat it as a new plugin, so sessions made with
 the pre-rebrand test builds will show MixCore as missing; re-insert it.
+
+## ADR-024 — Per-module power; only Smart Gain on by default; source type
+**Decision:** every module has its own on/off (Smart Gain `smartGainOn`, gate
+`gateEnabled`, de-bleed `drumDebleed`), shown as a power button on its tab.
+Defaults: Smart Gain on, gate and de-bleed off. Off = not processing: Smart
+Gain uses its latency-matched bypass (meters keep working), the gate passes the
+(latency-aligned) input with unity gain, de-bleed is bit-exact pass-through; all
+switch with a 10 ms crossfade. Drum channel presets still switch on the modules
+those presets exist for (gate; de-bleed on snare/toms). A non-automatable
+`sourceType` (Vocal/Speech/Drum/Instrument) is set by presets and saved in user
+presets (file v4); it changes wording only (Mix Coach, status, calibration).
+**Why:** user feedback: a vocal track should visibly not run drum processing,
+and the coach called a kick "the vocal input".
 
 ## Open decisions (need product input)
 * Plugin code `Mxcr` and the Windows installer AppId are kept; confirm they are

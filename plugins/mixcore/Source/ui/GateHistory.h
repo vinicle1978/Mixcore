@@ -1,6 +1,6 @@
 #pragma once
-// Scrolling gate view (last 10 s): detector level (gold), threshold and close
-// threshold (champagne lines), gain reduction (red fill from the top) and an
+// Scrolling gate view (last 10 s): detector level (blue), threshold and close
+// threshold (silver lines), gain reduction (red fill from the top) and an
 // open/hold band along the bottom. Shows at a glance whether hits clear the
 // threshold and whether bleed stays under it.
 

@@ -72,7 +72,7 @@ Open the **Gate** tab (or click the GATE box in the signal chain).
    (move the mic, or leave the gate off).
 4. Press **Apply threshold**. This sets threshold and hysteresis and switches
    the gate on. Undo works like any parameter change.
-5. Watch the graph: the gold line (what the gate hears) should jump above the
+5. Watch the graph: the blue line (what the gate hears) should jump above the
    white threshold on every hit or phrase and fall below the dashed line
    between them. Red shows how much the gate is turning the mic down.
 
@@ -95,7 +95,7 @@ The **Snare Drum** and **Toms** presets switch it on; **Kick Drum** leaves it of
 
 1. Play a few normal hits. MixCore learns how bright this drum is (the readout
    shows "Drum brightness ... | n hits"). Until then it does almost nothing.
-2. Watch the graph: gold = drum body, white = high band, red = how much high
+2. Watch the graph: blue = drum body, white = high band, red = how much high
    band is being turned down. Red should appear between hits and under the
    drum's tail when cymbals ring, and stay small on the hits themselves.
 3. Adjust by ear:

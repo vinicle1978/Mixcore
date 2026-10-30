@@ -8,6 +8,7 @@
 
 #include "mixcore/gain/SmartGainSettings.h"
 #include "mixcore/gain/SmartGainTelemetry.h"
+#include "mixcore/gain/SourceType.h"
 
 #include <string>
 #include <vector>
@@ -33,6 +34,8 @@ struct Advice
     std::string automaticNote; ///< What (if anything) MixCore is already doing.
 };
 
-std::vector<Advice> evaluateSmartGainAdvice(const SmartGainTelemetry& t, const SmartGainSettings& s);
+/// `source` only changes the wording ("the drum", "between hits", ...).
+std::vector<Advice> evaluateSmartGainAdvice(const SmartGainTelemetry& t, const SmartGainSettings& s,
+                                            SourceType source = SourceType::Vocal);
 
 } // namespace mixcore::gain

@@ -162,6 +162,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     addBools(layout, gateBoolParamSpecs());
     addFloats(layout, drumFloatParamSpecs());
     addBools(layout, drumBoolParamSpecs());
+
+    // Module power for Smart Gain (gate and de-bleed have their own on/off).
+    layout.add(std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ids::smartGainOn, 1 }, "Smart Gain On", true));
+    // Source type: wording only (Mix Coach, status). A setting, not automation.
+    juce::StringArray sources;
+    for (int i = 0; i < gain::kNumSourceTypes; ++i)
+        sources.add(gain::words(gain::sourceFromIndex(i)).name);
+    layout.add(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID { ids::sourceType, 1 }, "Source", sources, 0,
+                                                            juce::AudioParameterChoiceAttributes().withAutomatable(false)));
     return layout;
 }
 
@@ -173,6 +182,9 @@ ParameterReader::ParameterReader(juce::AudioProcessorValueTreeState& state)
     bind<G>(state, gateBoolParamSpecs(), gateBools_);
     bind<D>(state, drumFloatParamSpecs(), drumFloats_);
     bind<D>(state, drumBoolParamSpecs(), drumBools_);
+    gainOn_ = state.getRawParameterValue(ids::smartGainOn);
+    source_ = state.getRawParameterValue(ids::sourceType);
+    jassert(gainOn_ != nullptr && source_ != nullptr);
 }
 
 gain::SmartGainSettings ParameterReader::read() const noexcept

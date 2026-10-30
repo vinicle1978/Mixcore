@@ -146,9 +146,9 @@ void DrumPanel::addKnob(const char* id, const juce::String& caption, juce::Colou
     k.slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     k.slider.setTooltip(tooltip);
     k.label.setText(caption, juce::dontSendNotification);
-    k.label.setFont(theme::font(11.5f, true));
+    k.label.setFont(theme::font(12.5f, true));
     k.label.setJustificationType(juce::Justification::centred);
-    k.label.setColour(juce::Label::textColourId, theme::muted);
+    k.label.setColour(juce::Label::textColourId, theme::label);
     k.attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor_.state(), id, k.slider);
     addAndMakeVisible(k.slider);
     addAndMakeVisible(k.label);
