@@ -18,7 +18,7 @@ permissions:
 jobs:
   macos:
     name: "macOS installer (.pkg)"
-    runs-on: macos-14
+    runs-on: macos-15  # macos-14 images retire 2 Nov 2026
     steps:
       - uses: actions/checkout@v4
 
@@ -67,8 +67,16 @@ jobs:
         run: |
           killall -9 AudioComponentRegistrar 2>/dev/null || true
           sleep 2
-          auval -a | grep -i mixcore || { echo "MixCore not registered with the AU system"; exit 1; }
-          auval -strict -v aufx Mxcr Vnau
+          line="$(auval -a | grep -i mixcore | head -n 1)"
+          [ -n "$line" ] || { echo "MixCore not registered with the AU system"; exit 1; }
+          echo "Registered: $line"
+          # Validate exactly what was installed (type, subtype, manufacturer from auval -a).
+          read -r type sub manu _ <<<"$line"
+          case "$line" in
+            *VineAudio*) ;;
+            *) echo "::warning::This build is not branded VineAudio ($line). plugins/mixcore/CMakeLists.txt in the repo is probably an older copy - re-upload it." ;;
+          esac
+          auval -strict -v "$type" "$sub" "$manu"
 
       - name: Upload installer
         if: always()

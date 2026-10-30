@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "macOS universal (Apple Silicon + Intel)"
+            os: macos-15
+            configure: -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DMIXCORE_WARNINGS_AS_ERRORS=OFF
+            test-prefix: ""
+          - name: "Windows x64"
+            os: windows-latest
+            configure: -A x64 -DMIXCORE_WARNINGS_AS_ERRORS=OFF
+            test-prefix: ""
+          - name: "Linux x64"
+            os: ubuntu-24.04
+            configure: -G Ninja -DMIXCORE_WARNINGS_AS_ERRORS=ON
+            test-prefix: xvfb-run -a
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libasound2-dev libx11-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxcomposite-dev libxext-dev libfreetype-dev libfontconfig1-dev xvfb
+
+      - name: Cache fetched dependencies (JUCE, Catch2)
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: deps-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+
+      - name: Configure
+        shell: bash
+        # -Werror is verified on Linux only; enable it on macOS/Windows once a
+        # first clean run there has confirmed there are no platform warnings.
+        run: cmake -S . -B build ${{ matrix.configure }} -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Test
+        shell: bash
+        run: ${{ matrix.test-prefix }} ctest --test-dir build -C Release --output-on-failure
+
+      - name: Upload plugin artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: MixCore-${{ runner.os }}
+          path: |
+            build/plugins/mixcore/MixCore_artefacts/Release/VST3
+            build/plugins/mixcore/MixCore_artefacts/Release/AU
+            build/plugins/mixcore/MixCore_artefacts/Release/Standalone
+          if-no-files-found: error
+
+  sanitizers:
+    name: Engine sanitizers (ASan/UBSan, TSan)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: ASan + UBSan
+        run: |
+          cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=RelWithDebInfo -DMIXCORE_BUILD_PLUGIN=OFF \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer"
+          cmake --build build-asan --parallel --target mixcore_tests
+          ./build-asan/tests/mixcore_tests
+      - name: TSan
+        run: |
+          cmake -S . -B build-tsan -DCMAKE_BUILD_TYPE=RelWithDebInfo -DMIXCORE_BUILD_PLUGIN=OFF \
+            -DCMAKE_CXX_FLAGS="-fsanitize=thread"
+          cmake --build build-tsan --parallel --target mixcore_realtime_tests
+          ./build-tsan/tests/mixcore_realtime_tests "[threads]"
