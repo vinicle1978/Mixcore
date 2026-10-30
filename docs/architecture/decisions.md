@@ -178,6 +178,33 @@ presets (file v4); it changes wording only (Mix Coach, status, calibration).
 **Why:** user feedback: a vocal track should visibly not run drum processing,
 and the coach called a kick "the vocal input".
 
+## ADR-025 — Drum replacement: lookahead-aligned trigger + layered sampler
+**Decision:** detect on the pre-gate signal, measure velocity over a lookahead
+window (Live 1.5 ms / Studio 6 ms), delay the original by the same amount and
+start the sample on the exact sample where the hit lands in the delayed
+original. Latency only while replacement is on (host bypass keeps it, so
+bypassing never changes latency). Samples play after the gate.
+**Why:** sample-accurate phase alignment with the original is what makes
+augmentation (blend) sound like one drum; live use needs a small, fixed
+latency. Velocity accuracy on slow kick attacks is the documented trade-off.
+
+## ADR-026 — Kits: auto layering by loudness; lock-free hand-over with deferred free
+**Decision:** user samples are sorted by loudest-10-ms RMS and grouped into
+layers (within 1.5 dB = round robin, max 16 layers); names are ignored. Kits
+reach the audio thread through an atomic pointer; retired kits are freed on the
+message thread after two completed audio blocks. Starter kits are synthesised
+in code (no third-party samples, no licensing questions).
+**Why:** users drop in whatever files they have; naming conventions differ
+between libraries. The epoch rule is the simplest safe reclamation scheme for
+one audio thread (tested under TSan/ASan with kits swapped every 3 ms).
+
+## ADR-027 — Drum module master switch
+**Decision:** `drumOn` powers the whole drum module (Drums tab power button);
+de-bleed and replacement have their own on/off inside. Sessions/presets from
+before the switch existed load with it on if de-bleed was on.
+**Why:** one clear "is the drum module doing anything" control per the module
+power design (ADR-024), with independent sub-processes.
+
 ## Open decisions (need product input)
 * Plugin code `Mxcr` and the Windows installer AppId are kept; confirm they are
   final before the first public release.

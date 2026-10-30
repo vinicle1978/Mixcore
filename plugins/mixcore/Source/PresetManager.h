@@ -27,6 +27,7 @@ struct UserPreset
     juce::String name;
     juce::File file;
     strip::ChannelSettings settings;
+    juce::String kit; ///< Replacement kit source ("starter:snare", "files:...") or empty.
 };
 
 class PresetManager
@@ -53,7 +54,7 @@ public:
     bool exists(const juce::String& name) const;
 
     /// Writes (or overwrites) a preset. Returns an error message, or empty on success.
-    juce::String save(const juce::String& name, const strip::ChannelSettings& settings) const;
+    juce::String save(const juce::String& name, const strip::ChannelSettings& settings, const juce::String& kit = {}) const;
 
     bool remove(const juce::String& name) const;
 

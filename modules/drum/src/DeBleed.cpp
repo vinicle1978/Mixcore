@@ -69,7 +69,7 @@ void DeBleed::reset() noexcept
     winBodyMax_ = winHighMax_ = 0.0f;
     hits_ = 0;
     gainDb_ = 0.0f;
-    mix_ = (settings_.debleedEnabled && !bypassed_) ? 1.0f : 0.0f;
+    mix_ = (settings_.debleedActive() && !bypassed_) ? 1.0f : 0.0f;
     tick_ = 0;
     tickMaxRed_ = tickBody_ = tickHigh_ = 0.0f;
     snap_ = DeBleedTelemetry {};
@@ -114,7 +114,7 @@ void DeBleed::process(float* const* channels, int numChannels, int numSamples) n
         hits_ = 0;
     }
 
-    const float mixTarget = (settings_.debleedEnabled && !bypassed_) ? 1.0f : 0.0f;
+    const float mixTarget = (settings_.debleedActive() && !bypassed_) ? 1.0f : 0.0f;
     const float floorDb = -settings_.maxReductionDb();
     const float tolerance = dbToGain(settings_.debleedToleranceDb);
 

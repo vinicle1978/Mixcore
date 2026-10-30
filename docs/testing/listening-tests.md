@@ -48,6 +48,18 @@ whether phrase starts sound late, or whether the gain moves are noticeable.
 | D7 | Toggle de-bleed and Relearn during playback | Clicks? Over-processing right after Relearn? | — | |
 | D8 | Snare mic summed with overheads | Phase/tone change in the blend vs. Off (LR4 all-pass) | — | |
 
+### Drum replacement
+
+| # | Material | Listen for | Result | Notes |
+|---|---|---|---|---|
+| R1 | Snare groove with ghost notes, starter snare, Original Off | Every hit and ghost note triggers; nothing from hi-hat/kick bleed | — | |
+| R2 | Same, blended (Original 0 dB, Sample −6 dB) | Sounds like one drum (phase), no flamming | — | |
+| R3 | Kick, Live vs Studio | Soft/hard hits follow the playing in both? | — | |
+| R4 | Fast snare roll / flams | No missing or doubled hits at the chosen Retrigger | — | |
+| R5 | Toms with loud cymbals | No cymbal triggers | — | |
+| R6 | Own sample library (multi-layer) | Layer switching smooth, round robin avoids machine-gun effect | — | |
+| R7 | Switch Replace on/off and Live/Studio during playback | Clicks? Latency change handled by the DAW? | — | |
+
 ## Parameters to tune from these results
 
 Rider attack/release, max rate, deadband, strength default, activity margin,

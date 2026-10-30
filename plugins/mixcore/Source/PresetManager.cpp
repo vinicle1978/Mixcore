@@ -73,6 +73,7 @@ std::optional<UserPreset> PresetManager::read(const juce::File& file)
     // v4: module power and source type (older files: Smart Gain on, vocal).
     p.settings.gainOn = xml->getBoolAttribute("smartGainOn", true);
     p.settings.source = gain::sourceFromName(xml->getStringAttribute("source", "Vocal").toStdString());
+    p.kit = xml->getStringAttribute("kit");
     p.file = file;
     if (const auto* s = xml->getChildByName("Settings"))
         p.settings.gain = gain::SmartGainSettings::deserialise(s->getAllSubText().trim().toStdString());
@@ -109,7 +110,7 @@ std::optional<UserPreset> PresetManager::load(const juce::String& name) const
 
 bool PresetManager::exists(const juce::String& name) const { return fileFor(name).existsAsFile(); }
 
-juce::String PresetManager::save(const juce::String& name, const strip::ChannelSettings& settings) const
+juce::String PresetManager::save(const juce::String& name, const strip::ChannelSettings& settings, const juce::String& kit) const
 {
     const auto clean = sanitiseName(name);
     if (clean.isEmpty())
@@ -124,6 +125,8 @@ juce::String PresetManager::save(const juce::String& name, const strip::ChannelS
     root.setAttribute("name", clean);
     root.setAttribute("source", gain::words(settings.source).name);
     root.setAttribute("smartGainOn", settings.gainOn);
+    if (kit.isNotEmpty())
+        root.setAttribute("kit", kit);
     root.setAttribute("created", juce::Time::getCurrentTime().toISO8601(true));
     auto* s = root.createNewChildElement("Settings");
     s->addTextElement(juce::String(settings.gain.serialise()));

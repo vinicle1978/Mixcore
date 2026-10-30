@@ -856,3 +856,195 @@ TEST_CASE("Off modules are shown as off", "[plugin][modules][editor]")
         }
     }
 }
+
+// --------------------------------------------------------- Drum replacement
+
+namespace {
+void writeWav(const juce::File& f, float amplitude, double sr = 44100.0, int frames = 4410)
+{
+    f.deleteFile();
+    juce::WavAudioFormat wav;
+    auto stream = std::make_unique<juce::FileOutputStream>(f);
+    REQUIRE(stream->openedOk());
+    std::unique_ptr<juce::AudioFormatWriter> w(
+        wav.createWriterFor(stream.get(), sr, 1, 24, {}, 0));
+    REQUIRE(w != nullptr);
+    stream.release(); // owned by the writer now
+    juce::AudioBuffer<float> b(1, frames);
+    for (int i = 0; i < frames; ++i)
+        b.setSample(0, i, amplitude * std::exp(-static_cast<float>(i) / 800.0f) * std::sin(0.05f * static_cast<float>(i)));
+    w->writeFromAudioSampleBuffer(b, 0, frames);
+}
+} // namespace
+
+TEST_CASE("Drum module master switch and replacement parameters", "[plugin][replace][params]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    const auto d = p.currentChannelSettings().drum;
+    CHECK_FALSE(d.moduleOn);
+    CHECK_FALSE(d.replaceEnabled);
+    CHECK_FALSE(p.state().getParameter(ids::replaceLookahead)->isAutomatable());
+    CHECK(p.state().getParameter(ids::replaceOriginal)->getText(0.0f, 16) == "Off");
+    CHECK(p.state().getParameter(ids::replaceLength)->getText(1.0f, 16) == "Full");
+    CHECK(p.kitSource().isEmpty());
+
+    REQUIRE(p.loadFactoryPreset("Kick Drum"));
+    CHECK(p.kitSource() == "starter:kick"); // drum presets bring their starter kit...
+    CHECK_FALSE(p.currentChannelSettings().drum.replaceEnabled); // ...but replacement stays off
+    REQUIRE(p.loadFactoryPreset("Snare Drum"));
+    CHECK(p.kitSource() == "starter:snare");
+    CHECK(p.currentChannelSettings().drum.moduleOn); // de-bleed preset: module on
+    CHECK_FALSE(p.isPresetModified());
+}
+
+TEST_CASE("Replacement plays in the plugin, adds its latency only while on", "[plugin][replace][audio]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    REQUIRE(p.loadFactoryPreset("Snare Drum"));
+    setParam(p, ids::gateEnabled, 0.0f);
+    setParam(p, ids::gateLookahead, 0.0f);
+    setParam(p, ids::smartGainOn, 0.0f);
+    setParam(p, ids::drumDebleed, 0.0f);
+    p.setPlayConfigDetails(1, 1, 48000.0, 256);
+    p.prepareToPlay(48000.0, 256);
+    CHECK(p.getLatencySamples() == 0);
+
+    setParam(p, ids::drumReplace, 1.0f);
+    setParam(p, ids::replaceOriginal, -60.0f); // pure replacement
+    setParam(p, ids::replaceThreshold, -20.0f);
+    p.prepareToPlay(48000.0, 256);
+    CHECK(p.getLatencySamples() == 72); // 1.5 ms (Live)
+
+    juce::AudioBuffer<float> audio(1, 48000);
+    audio.clear();
+    for (int k = 0; k < 4000; ++k)
+        audio.setSample(0, 10000 + k, 0.5f * std::exp(-static_cast<float>(k) / 600.0f) * std::cos(0.02f * static_cast<float>(k)));
+    run(p, audio, 256);
+    // Silence before the hit; the starter snare from the hit on.
+    CHECK(audio.getMagnitude(0, 0, 10000 + 72) < 1.0e-4f);
+    CHECK(audio.getMagnitude(0, 10000 + 72, 2400) > 0.05f);
+    drum::ReplaceTelemetry t;
+    REQUIRE(p.readReplaceTelemetry(t));
+    CHECK(t.totalHits == 1);
+    CHECK(t.kitLoaded);
+}
+
+TEST_CASE("Your own samples: files and folders become a layered kit; sessions restore it", "[plugin][replace][kits]")
+{
+    JuceEnv env;
+    TempPresetDir temp;
+    temp.dir.createDirectory();
+    const auto kitDir = temp.dir.getChildFile("My Snare");
+    kitDir.createDirectory();
+    writeWav(kitDir.getChildFile("snare_soft.wav"), 0.1f);
+    writeWav(kitDir.getChildFile("snare_mid.wav"), 0.3f);
+    writeWav(kitDir.getChildFile("snare_hard_1.wav"), 0.9f);
+    writeWav(kitDir.getChildFile("snare_hard_2.wav"), 0.88f);
+    kitDir.getChildFile("notes.txt").replaceWithText("not audio");
+
+    MixCoreProcessor p;
+    CHECK(p.loadKitFolder(kitDir).isEmpty());
+    CHECK(p.kitName() == "My Snare");
+    CHECK(p.kitDescription().contains("3 velocity layers"));
+    CHECK(p.kitDescription().contains("(4 samples)"));
+
+    // Save the session, restore into a fresh instance: the kit comes back.
+    juce::MemoryBlock state;
+    p.getStateInformation(state);
+    MixCoreProcessor q;
+    q.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+    CHECK(q.kitName() == "My Snare");
+    CHECK(q.kitDescription().contains("(4 samples)"));
+
+    // Missing files are reported, not silently ignored.
+    kitDir.getChildFile("snare_mid.wav").deleteFile();
+    MixCoreProcessor r;
+    const auto msg = r.restoreKit(p.kitSource());
+    CHECK(msg.contains("snare_mid.wav"));
+    CHECK(r.kitDescription().contains("(3 samples)"));
+
+    // Bad input.
+    CHECK(p.loadKitFiles({ kitDir.getChildFile("notes.txt") }).isNotEmpty());
+    CHECK(p.loadKitFolder(temp.dir.getChildFile("nothing-here")).isNotEmpty());
+
+    // User presets remember the kit.
+    p.setPresetDirectory(temp.dir.getChildFile("presets"));
+    REQUIRE(p.loadStarterKit("starter:tom").isEmpty());
+    REQUIRE(p.saveUserPreset("Tom replace").isEmpty());
+    REQUIRE(p.loadStarterKit("starter:kick").isEmpty());
+    REQUIRE(p.loadUserPreset("Tom replace"));
+    CHECK(p.kitSource() == "starter:tom");
+}
+
+TEST_CASE("Older sessions with de-bleed on keep the drum module on", "[plugin][replace][state]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    REQUIRE(p.loadFactoryPreset("Snare Drum"));
+    juce::MemoryBlock state;
+    p.getStateInformation(state);
+    // Remove the drumOn parameter, as in a session saved before it existed.
+    auto xml = juce::AudioProcessor::getXmlFromBinary(state.getData(), static_cast<int>(state.getSize()));
+    REQUIRE(xml != nullptr);
+    for (auto* c : xml->getChildIterator())
+        if (c->getStringAttribute("id") == ids::drumOn)
+        {
+            xml->removeChildElement(c, true);
+            break;
+        }
+    juce::MemoryBlock old;
+    juce::AudioProcessor::copyXmlToBinary(*xml, old);
+    MixCoreProcessor q;
+    q.setStateInformation(old.getData(), static_cast<int>(old.getSize()));
+    CHECK(q.currentChannelSettings().drum.moduleOn);
+    CHECK(q.currentChannelSettings().drum.debleedEnabled);
+}
+
+TEST_CASE("Replace view renders", "[plugin][replace][editor]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    p.loadFactoryPreset("Snare Drum");
+    setParam(p, ids::drumReplace, 1.0f);
+    setParam(p, ids::replaceOriginal, -6.0f);
+    setParam(p, ids::replaceThreshold, -24.0f);
+    p.setPlayConfigDetails(1, 1, 48000.0, 480);
+    p.prepareToPlay(48000.0, 480);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
+    auto& ed = dynamic_cast<MixCoreEditor&>(*editor);
+    ed.setDrumView(true);
+    juce::Random rng(9);
+    juce::AudioBuffer<float> block(1, 480);
+    juce::MidiBuffer midi;
+    const float amps[] = { 0.2f, 0.45f, 0.9f, 0.3f, 0.7f, 0.15f };
+    for (int b = 0; b < 300; ++b)
+    {
+        for (int i = 0; i < 480; ++i)
+        {
+            const int n = b * 480 + i;
+            const int hit = n / 12000;
+            const float t = static_cast<float>(n % 12000) / 48000.0f;
+            const float a = amps[hit % 6];
+            block.setSample(0, i, a * std::exp(-t / 0.07f) * (0.6f * std::sin(2.0f * 3.14159f * 190.0f * t) + 0.4f * (rng.nextFloat() * 2.0f - 1.0f))
+                                      + 0.004f * (rng.nextFloat() * 2.0f - 1.0f));
+        }
+        p.processBlock(block, midi);
+        ed.refresh();
+    }
+    for (int k = 0; k < 12; ++k)
+        ed.refresh();
+    const auto image = ed.createComponentSnapshot(ed.getLocalBounds(), true, 1.0f);
+    CHECK(image.getWidth() == ed.getWidth());
+    drum::ReplaceTelemetry t;
+    p.readReplaceTelemetry(t);
+    CHECK(t.totalHits >= 10);
+    if (const char* outDir = std::getenv("MIXCORE_SNAPSHOT_DIR"))
+    {
+        juce::File f(juce::String(outDir) + "/mixcore-replace.png");
+        f.deleteFile();
+        juce::FileOutputStream stream(f);
+        juce::PNGImageFormat().writeImageToStream(image, stream);
+    }
+}

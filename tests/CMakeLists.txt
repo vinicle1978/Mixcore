@@ -10,6 +10,7 @@ add_executable(mixcore_tests
     dsp/test_gate.cpp
     dsp/test_debleed.cpp
     dsp/test_modules.cpp
+    dsp/test_replace.cpp
     regression/test_regression.cpp)
 target_link_libraries(mixcore_tests PRIVATE mixcore::gain mixcore::gate mixcore::drum mixcore::strip Catch2::Catch2WithMain)
 target_compile_definitions(mixcore_tests PRIVATE
@@ -21,7 +22,7 @@ catch_discover_tests(mixcore_tests TEST_PREFIX "unit:" PROPERTIES LABELS "unit")
 add_executable(mixcore_realtime_tests
     realtime/test_realtime.cpp
     support/AllocationTracker.cpp)
-target_link_libraries(mixcore_realtime_tests PRIVATE mixcore::gain mixcore::strip Catch2::Catch2WithMain)
+target_link_libraries(mixcore_realtime_tests PRIVATE mixcore::gain mixcore::drum mixcore::strip Catch2::Catch2WithMain)
 find_package(Threads REQUIRED)
 target_link_libraries(mixcore_realtime_tests PRIVATE Threads::Threads)
 mixcore_set_warnings(mixcore_realtime_tests)

@@ -29,6 +29,13 @@ const std::pair<const char*, std::pair<const char*, bool>> kGateFor[] = {
 };
 
 // Smart Gain preset -> de-bleed profile (on). Others get de-bleed off.
+// Smart Gain preset -> starter kit loaded for replacement (replacement stays off).
+const std::pair<const char*, const char*> kKitFor[] = {
+    { "Kick Drum", "starter:kick" },
+    { "Snare Drum", "starter:snare" },
+    { "Toms", "starter:tom" },
+};
+
 const std::pair<const char*, const char*> kDebleedFor[] = {
     { "Snare Drum", "snare" },
     { "Toms", "toms" },
@@ -69,6 +76,27 @@ std::vector<ChannelPreset> build()
                     p.settings.drum = profile->settings;
                     p.description += " De-bleed: on (" + std::string(profile->name) + ").";
                 }
+        for (const auto& [gainName, kitId] : kKitFor)
+            if (g.name == gainName)
+                p.kit = kitId;
+        // Replacement detector tuned per drum (replacement itself stays off).
+        if (g.name == "Kick Drum")
+        {
+            p.settings.drum.replaceDetectHighHz = 200.0f; // ignore snare and cymbals
+            p.settings.drum.replaceThresholdDb = -26.0f;
+        }
+        else if (g.name == "Snare Drum")
+        {
+            p.settings.drum.replaceDetectLowHz = 150.0f; // ignore the kick
+            p.settings.drum.replaceThresholdDb = -26.0f;
+        }
+        else if (g.name == "Toms")
+        {
+            p.settings.drum.replaceDetectLowHz = 60.0f;
+            p.settings.drum.replaceDetectHighHz = 2000.0f; // ignore cymbals
+            p.settings.drum.replaceThresholdDb = -28.0f;
+            p.settings.drum.replaceRetriggerMs = 60.0f;
+        }
         p.settings.validate();
         out.push_back(std::move(p));
     }
@@ -93,10 +121,7 @@ const ChannelPreset* findChannelPreset(const std::string& name)
 
 bool drumSettingsMatch(const drum::DrumSettings& a, const drum::DrumSettings& b, float tolerance)
 {
-    const auto near = [tolerance](float x, float y) { return std::abs(x - y) <= tolerance * std::max(1.0f, std::abs(y)); };
-    return a.debleedEnabled == b.debleedEnabled && near(a.debleedAmount, b.debleedAmount)
-           && near(a.debleedCrossoverHz, b.debleedCrossoverHz) && near(a.debleedLengthMs, b.debleedLengthMs)
-           && near(a.debleedToleranceDb, b.debleedToleranceDb);
+    return drum::approximatelyEqual(a, b, tolerance);
 }
 
 ChannelSettings applyChannelPreset(const ChannelSettings& current, const ChannelSettings& preset)

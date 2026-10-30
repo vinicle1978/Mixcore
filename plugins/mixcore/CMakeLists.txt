@@ -33,6 +33,7 @@ target_sources(MixCore PRIVATE
     Source/PluginEditor.cpp
     Source/ui/GatePanel.cpp
     Source/ui/DrumPanel.cpp
+    Source/ui/ReplacePanel.cpp
     Source/ui/Theme.cpp)
 
 target_include_directories(MixCore PRIVATE Source)

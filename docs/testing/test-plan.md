@@ -15,7 +15,7 @@ Timing-sensitive suites (`realtime`, `performance`) are marked `RUN_SERIAL`.
 
 * **Date:** 2026-10-29 · **Commit:** see `git log` · **Machine:** Linux x86_64 dev
   container, 2 vCPU Intel Xeon @ 2.10 GHz, GCC 13.3, JUCE 8.0.4, Catch2 3.7.1.
-* **Result: 101 / 101 CTest tests passed** (after module power + source type; 93 / 93 after the VineAudio rebrand; 90 / 90 after drum de-bleed; 74 / 74 after the gate, 48 / 48 with presets, 37 / 37 before) (three consecutive parallel runs), and
+* **Result: 121 / 121 CTest tests passed** (after drum replacement; 101 / 101 after module power + source type; 93 / 93 after the VineAudio rebrand; 90 / 90 after drum de-bleed; 74 / 74 after the gate, 48 / 48 with presets, 37 / 37 before) (three consecutive parallel runs), and
   again from a **fresh clone configured exactly like the Linux CI job**
   (JUCE/Catch2 fetched from GitHub, engine `-Werror`).
 * Engine + tests also built with **Clang 18 / libc++ with `-Werror`**: all
@@ -127,6 +127,27 @@ listening tests are required.
 | Plugin: Smart Gain off = static gain not applied; source not automatable; user preset v4 keeps source + power; v3 files load as Vocal/on | pass |
 | Editor: off modules render as off (screenshots) | pass |
 | Realtime: Smart Gain power toggled in the strip no-allocation test | pass |
+
+## Drum replacement tests
+
+| Requirement | Test | Result |
+|---|---|---|
+| Settings | validate/round-trip; v1 strings (no master switch) load with the module on | pass |
+| Timing | sample starts exactly at onset + latency (72 samples @ 48 kHz); with original kept, original + sample sum on that sample | pass |
+| Key offset | audio lagging the key by the gate lookahead: still sample-exact | pass |
+| Off | replace off or module off: bit-exact, 0 latency; switching on mid-stream stays finite | pass |
+| Detection | kick groove over bleed (−40 dB): exactly 16 triggers for 16 kicks (found and fixed: the dips between cycles of a 50 Hz tail re-armed the detector, giving 32 — re-arm now needs 15 ms below) | pass |
+| Retrigger | flam 20 ms apart: 1 trigger at 40 ms retrigger, 2 at 10 ms (found and fixed: a third false trigger from the decaying first hit — the "sudden rise" re-arm now uses a floor envelope) | pass |
+| Velocity | output rises monotonically with hit strength; Dynamics 0 = identical hits | pass |
+| Layers / round robin | quiet hit → quietest layer; loud hits → loudest layer, alternating variations | pass |
+| Pitch / resampling | 0 / +12 / −12 st → 1000 / 2000 / 500 Hz (±1 %); 44.1 kHz sample at 48 kHz keeps pitch | pass |
+| Attack / Length | 10 ms fade-in shape; 50 ms length silent afterwards | pass |
+| Block size | 64 vs 997: bit-identical | pass |
+| Kits | auto layering (5 files → 3 layers, RR grouping, silent dropped, cap merges), describe(); starter kits 3×2, layers ≥ 2 dB apart | pass |
+| Kit exchange | retired kit freed only after 2 blocks; 60 swaps every 3 ms against a running audio thread (run under TSan/ASan) | pass |
+| Strip | detector hears pre-gate (closed gate still triggers); latency = gate + replacement; aligned | pass |
+| Realtime | strip no-allocation test toggles module/replacement, Live/Studio lookahead, pitch, length with a kit loaded | pass |
+| Plugin | params (Off/Full display, lookahead not automatable); presets load starter kits, replacement off; 0 → 72 samples latency; end-to-end playback; folder → 3 layers/4 samples; session restore; missing files named; user preset keeps kit; old sessions keep drum module on; Replace view renders | pass |
 
 ## Plugin adapter tests
 

@@ -22,6 +22,7 @@ struct ChannelPreset
     std::string category;
     std::string description;
     std::string gateProfile; ///< Name of the gate profile used.
+    std::string kit;         ///< Starter kit for drum replacement ("" = keep the current kit).
     ChannelSettings settings;
 };
 

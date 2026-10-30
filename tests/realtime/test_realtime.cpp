@@ -119,6 +119,7 @@ TEST_CASE("Telemetry and calibration control are safe across threads", "[realtim
 #endif
 }
 
+#include "mixcore/drum/StarterKits.h"
 #include "mixcore/strip/ChannelPresets.h"
 
 TEST_CASE("The full channel strip (Smart Gain + De-bleed + Gate) never allocates", "[realtime][allocation][strip]")
@@ -130,6 +131,7 @@ TEST_CASE("The full channel strip (Smart Gain + De-bleed + Gate) never allocates
     auto s = findChannelPreset("Snare Drum")->settings;
     strip.setSettings(s);
     strip.reset();
+    strip.replacer().kits().publish(mixcore::drum::makeStarterKit("starter:snare")); // message thread, before the loop
     strip.gate().learner().requestStart(2.0);
     strip.gain().calibrator().requestStart(1.0);
 
@@ -137,6 +139,7 @@ TEST_CASE("The full channel strip (Smart Gain + De-bleed + Gate) never allocates
     std::vector<float> l = mono, r = mono;
     mixcore::gate::GateTelemetry gt;
     mixcore::drum::DeBleedTelemetry dt;
+    mixcore::drum::ReplaceTelemetry rt;
     SmartGainTelemetry st;
     std::size_t allocations = 0, frees = 0;
     int block = 0;
@@ -149,6 +152,12 @@ TEST_CASE("The full channel strip (Smart Gain + De-bleed + Gate) never allocates
         s.gainOn = (block / 173) % 5 != 2; // Smart Gain module power
         s.drum.debleedEnabled = (block / 53) % 3 != 1;
         s.drum.debleedCrossoverHz = 3000.0f + static_cast<float>(block % 5) * 1000.0f; // crossover redesigns
+        s.drum.moduleOn = (block / 61) % 4 != 3;
+        s.drum.replaceEnabled = (block / 37) % 3 != 2;                  // replacement on/off (latency changes)
+        s.drum.replaceLookaheadMs = (block / 90) % 2 ? 1.5f : 6.0f;      // live / studio
+        s.drum.replacePitchSt = static_cast<float>(block % 9) - 4.0f;
+        s.drum.replaceThresholdDb = -30.0f;
+        s.drum.replaceLengthMs = (block % 2) ? 2000.0f : 120.0f;
         if (block == 400)
             strip.debleed().resetLearning();
         float* ptrs[2] = { l.data() + pos, r.data() + pos };
@@ -157,6 +166,7 @@ TEST_CASE("The full channel strip (Smart Gain + De-bleed + Gate) never allocates
         strip.process(ptrs, 2, 256);
         strip.gate().readTelemetry(gt);
         strip.debleed().readTelemetry(dt);
+        strip.replacer().readTelemetry(rt);
         strip.gain().readTelemetry(st);
         allocations += check.counts().allocations;
         frees += check.counts().deallocations;
@@ -164,4 +174,45 @@ TEST_CASE("The full channel strip (Smart Gain + De-bleed + Gate) never allocates
     CHECK(allocations == 0);
     CHECK(frees == 0);
     CHECK(strip.gate().learner().state() == mixcore::gate::LearnState::Ready); // learning ran on the audio thread
+}
+
+TEST_CASE("Kit swaps while the audio thread plays never touch freed memory", "[realtime][threads][replace]")
+{
+    // Run under ThreadSanitizer / AddressSanitizer to make this meaningful.
+    using namespace mixcore::drum;
+    DrumReplacer r;
+    REQUIRE(r.prepare(48000.0, 128, 1));
+    DrumSettings s;
+    s.moduleOn = true;
+    s.replaceEnabled = true;
+    s.replaceThresholdDb = -30.0f;
+    s.replaceRetriggerMs = 5.0f;
+    r.setSettings(s);
+    r.reset();
+    r.kits().publish(makeStarterKit("starter:kick"));
+
+    std::atomic<bool> stop { false };
+    std::thread audio([&] {
+        std::vector<float> buf(128), key(128);
+        int n = 0;
+        while (!stop.load())
+        {
+            for (int i = 0; i < 128; ++i, ++n)
+                key[static_cast<size_t>(i)] = buf[static_cast<size_t>(i)] = (n % 2400) < 20 ? 0.8f : 0.0f; // a hit every 50 ms
+            float* io[1] = { buf.data() };
+            const float* k[1] = { key.data() };
+            r.process(io, k, 1, 128);
+        }
+    });
+    const char* ids[] = { "starter:kick", "starter:snare", "starter:tom" };
+    for (int i = 0; i < 60; ++i)
+    {
+        r.kits().publish(makeStarterKit(ids[i % 3]));
+        std::this_thread::sleep_for(std::chrono::milliseconds(3));
+        r.kits().collectGarbage();
+    }
+    stop = true;
+    audio.join();
+    r.kits().collectGarbage();
+    CHECK(r.kits().retiredCount() <= 2); // freed as the audio thread moved on
 }

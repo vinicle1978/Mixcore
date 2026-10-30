@@ -80,7 +80,13 @@ channel carries, so the Mix Coach and status talk about "the drum" and "between
 hits" on a kick instead of "the vocal". Presets set it; it does not change the
 processing.
 
-## 8. Drums: de-bleed (optional)
+## 8. Drums: replacement (optional)
+
+On a drum mic, **Drums → Replace** triggers samples from each hit (your own WAV
+files or the starter kits), replacing or blending with the original. Live mode
+adds 1.5 ms. See [presets.md](presets.md#drum-replacement).
+
+## 8b. Drums: de-bleed (optional)
 
 On snare and tom mics, open the **Drums** tab. De-bleed turns down hi-hat and
 cymbal bleed in the high end, even while the gate is open, without touching the

@@ -37,13 +37,20 @@ Stage**.
   close mics *during* hits as well as between them. The drum body below the
   crossover is never touched; the drum's own brightness is learned from its
   hits. Zero latency (live-safe). Snare/Toms presets switch it on.
-  [De-bleed spec](docs/dsp/debleed.md). Drum replacement (own WAV kits,
-  velocity, attack/decay) is the next phase.
+  [De-bleed spec](docs/dsp/debleed.md).
+* **Drum replacement** (new, Drums tab → Replace): detects hits and plays
+  samples (velocity layers, round robin, pitch, attack, length), replacing or
+  blending with the original, sample-aligned. Live mode adds 1.5 ms; Studio
+  6 ms. Your own WAV/AIFF files or a kit folder (auto-sorted into velocity
+  layers) or the original starter kits (kick, snare, tom).
+  [Replacement spec](docs/dsp/drum-replacement.md)
+* **Module power**: each module (Smart Gain, Gate, Drums) has its own on/off;
+  only Smart Gain is on by default.
 * **MixCore plugin + standalone app** (JUCE 8): VST3, AU (macOS), Standalone,
   with host parameters, state save/restore, host bypass, latency reporting and
   an editor showing live meters, gain chain, 20 s rider history, calibration
   and Mix Coach.
-* **101 automated tests** (unit, integration, regression, realtime, performance,
+* **121 automated tests** (unit, integration, regression, realtime, performance,
   plugin) — all passing on Linux; engine also passes under Clang/libc++
   `-Werror`, ASan/UBSan and TSan. Details: [`docs/testing/test-plan.md`](docs/testing/test-plan.md).
 
@@ -117,8 +124,8 @@ engine/core        units (DbMath), lock-free TripleBuffer           (header-only
 engine/dsp         RMS window, true peak, lookahead guard, biquad
 modules/gain       Smart Gain Stage, rider, activity, calibration, coach
 modules/gate       gate/expander, key filters, threshold learning, profiles
-modules/drum       drum de-bleed (replacement planned), drum profiles
-modules/strip      channel strip (Smart Gain -> De-bleed -> Gate), channel presets, strip coach
+modules/drum       drum de-bleed, drum replacement (trigger + sampler, kits), drum profiles
+modules/strip      channel strip (Smart Gain -> De-bleed -> Gate -> Replacement), presets, coach
 plugins/mixcore    JUCE plugin/standalone adapter and editor
 tests/             unit, integration, regression, realtime, performance, plugin
 docs/              architecture, DSP spec, testing, user guide
@@ -128,7 +135,7 @@ docs/              architecture, DSP spec, testing, user guide
 
 * [Architecture overview](docs/architecture/overview.md) · [Decisions](docs/architecture/decisions.md) ·
   [Realtime safety](docs/architecture/realtime-safety.md) · [Routing](docs/architecture/routing.md)
-* [Smart Gain Stage DSP spec](docs/dsp/smart-gain-stage.md) · [Gate DSP spec](docs/dsp/gate.md) · [De-bleed DSP spec](docs/dsp/debleed.md)
+* [Smart Gain Stage DSP spec](docs/dsp/smart-gain-stage.md) · [Gate DSP spec](docs/dsp/gate.md) · [De-bleed DSP spec](docs/dsp/debleed.md) · [Drum replacement spec](docs/dsp/drum-replacement.md)
 * [Test plan & results](docs/testing/test-plan.md) · [Listening tests](docs/testing/listening-tests.md)
 * [User quick start](docs/user-guide/quick-start.md) · [Installing on Mac / testing in Logic](docs/user-guide/installing-on-mac.md)
 * [Third-party licences](THIRD_PARTY_LICENSES.md)
@@ -138,7 +145,7 @@ docs/              architecture, DSP spec, testing, user guide
 1. ~~Repository & architecture~~ ✔
 2. Audio foundation: multi-channel engine, channel state, routing — *partly (meters, realtime checks)*
 3. ~~Smart Gain Stage~~ ✔ (pending listening tests)
-4. ~~Gate/expander~~ ✔, ~~drum de-bleed~~ ✔ (pending listening tests), drum replacement, parametric EQ, compressor, saturation
+4. ~~Gate/expander~~ ✔, ~~drum de-bleed~~ ✔, ~~drum replacement~~ ✔ (pending listening tests), parametric EQ, compressor, saturation
 5. Channel registry, shared analysis, recommendations (preview/apply/undo)
 6. Master bus, loudness & true peak, tonal analysis, LiveMixing / LiveStreaming
 7. Standalone live mixer: strips, buses, scenes, Mix Coach, setup wizard

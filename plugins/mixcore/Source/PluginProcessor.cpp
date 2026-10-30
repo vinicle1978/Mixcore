@@ -3,6 +3,7 @@
 #include "PluginEditor.h"
 
 #include "mixcore/drum/DrumProfiles.h"
+#include "mixcore/drum/StarterKits.h"
 #include "mixcore/gate/GateProfiles.h"
 #include "mixcore/strip/ChannelPresets.h"
 
@@ -13,6 +14,10 @@ constexpr const char* kStateTag = "MixCoreState";
 constexpr int kStateVersion = 1;
 constexpr const char* kPresetNameProp = "presetName";
 constexpr const char* kPresetIsUserProp = "presetIsUser";
+constexpr const char* kKitSourceProp = "kitSource";
+constexpr const char* kKitNameProp = "kitName";
+constexpr int kMaxKitFiles = 128;
+constexpr double kMaxSampleSeconds = 30.0;
 } // namespace
 
 MixCoreProcessor::MixCoreProcessor()
@@ -22,6 +27,7 @@ MixCoreProcessor::MixCoreProcessor()
       state_(*this, nullptr, kStateTag, createParameterLayout()),
       reader_(state_)
 {
+    formats_.registerBasicFormats(); // WAV, AIFF (+ FLAC/Ogg where available)
     const auto& first = strip::channelPresets().front();
     setCurrentPreset(first.name, false, first.settings);
     startTimerHz(20);
@@ -62,6 +68,7 @@ void MixCoreProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Midi
 
 void MixCoreProcessor::timerCallback()
 {
+    strip_.replacer().kits().collectGarbage(); // frees kits the audio thread has finished with
     const int latency = strip_.latencySamples();
     if (latency != getLatencySamples())
         setLatencySamples(latency);
@@ -134,6 +141,7 @@ bool MixCoreProcessor::loadDrumProfile(const juce::String& id)
     if (profile == nullptr)
         return false;
     applyDrumToParameters(profile->settings);
+    setParam(ids::drumOn, 1.0f); // a profile is a request to use the drum module
     resetDebleedLearning(); // a new drum/profile: learn its brightness afresh
     return true;
 }
@@ -197,6 +205,8 @@ bool MixCoreProcessor::loadFactoryPreset(const juce::String& name)
     if (preset == nullptr)
         return false;
     applySettingsToParameters(preset->settings);
+    if (!preset->kit.empty())
+        loadStarterKit(juce::String(preset->kit)); // drum presets bring their starter kit (replacement stays off)
     setCurrentPreset(name, false, preset->settings);
     updateHostDisplay(ChangeDetails().withProgramChanged(true));
     return true;
@@ -208,6 +218,8 @@ bool MixCoreProcessor::loadUserPreset(const juce::String& name)
     if (!preset)
         return false;
     applySettingsToParameters(preset->settings);
+    if (preset->kit.isNotEmpty())
+        restoreKit(preset->kit);
     setCurrentPreset(preset->name, true, preset->settings);
     return true;
 }
@@ -218,7 +230,7 @@ juce::String MixCoreProcessor::saveUserPreset(const juce::String& name)
     if (strip::findChannelPreset(clean.toStdString()) != nullptr)
         return "\"" + clean + "\" is a factory preset name. Please choose another name.";
     const auto settings = reader_.readChannel();
-    const auto error = presets_.save(clean, settings);
+    const auto error = presets_.save(clean, settings, kitSource());
     if (error.isEmpty())
         setCurrentPreset(clean, true, settings);
     return error;
@@ -276,12 +288,140 @@ void MixCoreProcessor::setStateInformation(const void* data, int sizeInBytes)
     auto xml = getXmlFromBinary(data, sizeInBytes);
     if (xml == nullptr || !xml->hasTagName(state_.state.getType()))
         return; // unknown or corrupt state: keep current (safe) settings
+    // Sessions saved before the drum module had a master switch: it was on if de-bleed was.
+    bool hasDrumOn = false, debleedOn = false;
+    for (const auto* p : xml->getChildIterator())
+    {
+        if (p->getStringAttribute("id") == ids::drumOn)
+            hasDrumOn = true;
+        if (p->getStringAttribute("id") == ids::drumDebleed)
+            debleedOn = p->getDoubleAttribute("value") >= 0.5;
+    }
     state_.replaceState(juce::ValueTree::fromXml(*xml));
+    if (!hasDrumOn && debleedOn)
+        if (auto* p = state_.getParameter(ids::drumOn))
+            p->setValueNotifyingHost(1.0f);
+    if (const auto kit = state_.state.getProperty(kKitSourceProp).toString(); kit.isNotEmpty())
+        restoreKit(kit);
     if (!state_.state.hasProperty(kPresetNameProp))
         state_.state.setProperty(kPresetNameProp, juce::String(strip::channelPresets().front().name), nullptr);
     restorePresetReference();
     // Parameters missing from older sessions keep their defaults; the engine
     // re-validates every value before use.
+}
+
+// ------------------------------------------------------------- Kits
+
+void MixCoreProcessor::publishKit(std::unique_ptr<drum::SampleKit> kit, const juce::String& source)
+{
+    const juce::String name = kit != nullptr ? juce::String(kit->name) : juce::String();
+    strip_.replacer().kits().publish(std::move(kit));
+    state_.state.setProperty(kKitSourceProp, source, nullptr);
+    state_.state.setProperty(kKitNameProp, name, nullptr);
+}
+
+juce::String MixCoreProcessor::loadStarterKit(const juce::String& id)
+{
+    auto kit = drum::makeStarterKit(id.toStdString());
+    if (kit == nullptr)
+        return "Unknown starter kit: " + id;
+    publishKit(std::move(kit), id);
+    return {};
+}
+
+juce::String MixCoreProcessor::loadKitFiles(const juce::Array<juce::File>& files, const juce::String& kitName)
+{
+    std::vector<drum::SampleBuffer> samples;
+    juce::StringArray problems, paths;
+    for (const auto& f : files)
+    {
+        if (static_cast<int>(samples.size()) >= kMaxKitFiles)
+        {
+            problems.add("only the first " + juce::String(kMaxKitFiles) + " files were used");
+            break;
+        }
+        std::unique_ptr<juce::AudioFormatReader> reader(formats_.createReaderFor(f));
+        if (reader == nullptr)
+        {
+            problems.add(f.getFileName() + ": not a readable audio file");
+            continue;
+        }
+        if (reader->sampleRate <= 0.0 || reader->lengthInSamples <= 1
+            || static_cast<double>(reader->lengthInSamples) / reader->sampleRate > kMaxSampleSeconds)
+        {
+            problems.add(f.getFileName() + ": empty or longer than 30 s");
+            continue;
+        }
+        const int n = static_cast<int>(reader->lengthInSamples);
+        const int ch = juce::jlimit(1, 2, static_cast<int>(reader->numChannels));
+        juce::AudioBuffer<float> buf(ch, n);
+        reader->read(&buf, 0, n, 0, true, ch > 1);
+        drum::SampleBuffer s;
+        s.name = f.getFileNameWithoutExtension().toStdString();
+        s.sampleRate = reader->sampleRate;
+        s.left.assign(buf.getReadPointer(0), buf.getReadPointer(0) + n);
+        if (ch > 1)
+            s.right.assign(buf.getReadPointer(1), buf.getReadPointer(1) + n);
+        samples.push_back(std::move(s));
+        paths.add(f.getFullPathName());
+    }
+    if (samples.empty())
+        return problems.isEmpty() ? juce::String("No audio files were selected.")
+                                  : "No samples could be loaded (" + problems.joinIntoString("; ") + ").";
+    const auto name = kitName.isNotEmpty() ? kitName : (files.size() == 1 ? files[0].getFileNameWithoutExtension() : juce::String("My samples"));
+    auto kit = std::make_unique<drum::SampleKit>(drum::buildKit("files", name.toStdString(), std::move(samples)));
+    if (kit->empty())
+        return "The selected files are silent.";
+    publishKit(std::move(kit), "files:" + paths.joinIntoString("\n"));
+    return problems.isEmpty() ? juce::String() : "Loaded, but " + problems.joinIntoString("; ") + ".";
+}
+
+juce::String MixCoreProcessor::loadKitFolder(const juce::File& folder)
+{
+    auto files = folder.findChildFiles(juce::File::findFiles, true, "*.wav;*.WAV;*.aif;*.aiff;*.AIF;*.AIFF;*.flac");
+    files.sort();
+    if (files.isEmpty())
+        return "No WAV or AIFF files in " + folder.getFileName() + ".";
+    return loadKitFiles(files, folder.getFileName());
+}
+
+juce::String MixCoreProcessor::restoreKit(const juce::String& source)
+{
+    if (source.startsWith("starter:"))
+        return loadStarterKit(source);
+    if (source.startsWith("files:"))
+    {
+        juce::Array<juce::File> files;
+        juce::StringArray missing;
+        for (const auto& path : juce::StringArray::fromLines(source.fromFirstOccurrenceOf("files:", false, false)))
+        {
+            if (path.isEmpty())
+                continue;
+            const juce::File f(path);
+            if (f.existsAsFile())
+                files.add(f);
+            else
+                missing.add(f.getFileName());
+        }
+        const auto name = state_.state.getProperty(kKitNameProp).toString();
+        if (files.isEmpty())
+            return "The kit's sample files were not found (" + missing.joinIntoString(", ") + ").";
+        auto error = loadKitFiles(files, name);
+        if (missing.size() > 0)
+            error = (error.isEmpty() ? juce::String() : error + " ") + "Missing: " + missing.joinIntoString(", ") + ".";
+        return error;
+    }
+    return {};
+}
+
+juce::String MixCoreProcessor::kitSource() const { return state_.state.getProperty(kKitSourceProp).toString(); }
+
+juce::String MixCoreProcessor::kitName() const { return state_.state.getProperty(kKitNameProp).toString(); }
+
+juce::String MixCoreProcessor::kitDescription() const
+{
+    const auto* kit = const_cast<MixCoreProcessor*>(this)->strip_.replacer().kits().published();
+    return kit == nullptr ? juce::String("No kit loaded") : juce::String(kit->name) + "  -  " + juce::String(kit->describe());
 }
 
 juce::AudioProcessorEditor* MixCoreProcessor::createEditor() { return new MixCoreEditor(*this); }

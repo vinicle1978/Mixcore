@@ -113,6 +113,39 @@ handles silence between hits and low-frequency bleed (kick in the snare mic);
 de-bleed handles cymbals while the gate is open. Details and limits:
 [`docs/dsp/debleed.md`](../dsp/debleed.md).
 
+## Drum replacement
+
+Open **Drums → Replace**.
+
+1. Switch the Drums module on (power button on the Drums tab) and press
+   **Replace ON**.
+2. Choose a kit: **Starter Kick / Snare / Tom** (MixCore's own sounds), or
+   **Load samples...** (pick several WAV/AIFF files of one drum, soft to hard)
+   or **Load kit folder...**. MixCore sorts your files by loudness into velocity
+   layers; files of similar loudness become round-robin variations. The line
+   under the menu shows what was built, e.g. "3 velocity layers x 2 round robin".
+3. Set **Threshold** so every real hit shows a marker in the graph (bar height
+   = how hard it was hit) and bleed does not. On the kick, **Detect High** ~200 Hz
+   ignores the snare; on the snare, **Detect Low** ~150 Hz ignores the kick (the
+   drum presets set these for you).
+4. Blend: **Original Off** = pure replacement; Original and Sample both up =
+   augmentation (a fatter, more consistent drum that keeps the player's feel).
+5. Shape: **Dynamics** (100 % follows the drummer, 0 % = every hit the same),
+   **Pitch**, **Attack** (softens the click), **Length** (shortens long samples).
+6. **Live / Studio**: Live adds 1.5 ms latency (fine for in-ears); Studio adds
+   6 ms and measures the strength of slow-attack kicks more accurately.
+
+| Want | Do |
+|---|---|
+| One hit triggers twice | raise **Retrigger** or **Threshold** |
+| Ghost notes don't trigger | lower **Threshold** |
+| Snare triggers from the toms | raise **Detect Low** / Threshold, check markers |
+| Every hit sounds the same | raise **Dynamics** (and use a kit with several layers) |
+| Soft hits too quiet | lower **Dynamics** or **Range** (Advanced) |
+
+Sessions and your presets remember the kit. If sample files were moved,
+MixCore tells you which ones it could not find.
+
 ## Your own presets
 
 1. Set things up the way you like.
@@ -137,7 +170,7 @@ up or copy them to another computer:
 Presets you saved before the VineAudio rebrand (in `…/MixCore/Presets/Smart Gain/`)
 are copied into the new folder automatically the first time MixCore opens.
 
-User presets save the gate and de-bleed too. Presets saved by earlier versions
+User presets save the gate, de-bleed, replacement settings and the kit too. Presets saved by earlier versions
 still load, with the newer modules off.
 
 A user preset also records the static gain at the time you saved it (for

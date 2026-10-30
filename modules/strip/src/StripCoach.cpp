@@ -4,11 +4,50 @@
 
 namespace mixcore::strip {
 
+namespace {
+void replaceAdvice(std::vector<gain::Advice>& out, const gain::SmartGainTelemetry& gainT, const drum::ReplaceTelemetry& r)
+{
+    using gain::AdviceSeverity;
+    if (!r.enabled)
+        return;
+    if (!r.kitLoaded)
+    {
+        out.push_back({ "replace-no-kit", AdviceSeverity::Warning, "Drum replacement is on, but no samples are loaded.",
+                        "Hits are detected, but there is nothing to play.",
+                        "The kit menu on the Drums page (Replace).",
+                        "Choose a starter kit, or load your own WAV samples or a kit folder.",
+                        false, "The original drum plays as normal." });
+        return;
+    }
+    if (r.hitsLastSecond >= 14)
+    {
+        out.push_back({ "replace-double-triggers", AdviceSeverity::Warning,
+                        "Replacement is triggering very often (" + std::to_string(r.hitsLastSecond) + " hits in the last second).",
+                        "Double triggers or bleed triggers sound like flams or ghost notes that were never played.",
+                        "Watch the hit markers in the graph: one marker per real hit?",
+                        "Raise the threshold or the retrigger time, or narrow the detector (Low / High) to this drum.",
+                        true, "Every detected hit plays a sample." });
+    }
+    const bool playing = gainT.activity == gain::ActivityState::Active && gainT.inputRmsDb > -50.0f;
+    if (playing && r.secondsSinceHit >= 4.0f && r.detectorDb < r.thresholdDb && r.detectorDb > -149.0f)
+    {
+        out.push_back({ "replace-no-hits", AdviceSeverity::Warning,
+                        "The drum is playing but no hits have been detected for a while.",
+                        "With the original turned down, missed hits mean missing drum hits in the mix.",
+                        "Compare the detector level (blue) with the threshold line in the Replace graph.",
+                        "Lower the threshold until every real hit shows a marker.",
+                        false, "No automatic change." });
+    }
+}
+} // namespace
+
 std::vector<gain::Advice> evaluateStripAdvice(const gain::SmartGainTelemetry& gainT, const gate::GateTelemetry& gateT,
-                                              const ChannelSettings& settings)
+                                              const ChannelSettings& settings, const drum::ReplaceTelemetry* replaceT)
 {
     auto out = settings.gainOn ? gain::evaluateSmartGainAdvice(gainT, settings.gain, settings.source)
                                : std::vector<gain::Advice> {};
+    if (replaceT != nullptr)
+        replaceAdvice(out, gainT, *replaceT);
     const auto& w = gain::words(settings.source);
     const bool voice = settings.source == gain::SourceType::Vocal || settings.source == gain::SourceType::Speech;
     if (!gateT.enabled)

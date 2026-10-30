@@ -5,6 +5,7 @@
 
 #include "mixcore/strip/ChannelStrip.h"
 
+#include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
 namespace mixcore::plugin {
@@ -53,6 +54,7 @@ public:
     bool readTelemetry(gain::SmartGainTelemetry& out) noexcept { return strip_.gain().readTelemetry(out); }
     bool readGateTelemetry(gate::GateTelemetry& out) noexcept { return strip_.gate().readTelemetry(out); }
     bool readDebleedTelemetry(drum::DeBleedTelemetry& out) noexcept { return strip_.debleed().readTelemetry(out); }
+    bool readReplaceTelemetry(drum::ReplaceTelemetry& out) noexcept { return strip_.replacer().readTelemetry(out); }
 
     // Smart Gain calibration
     void startCalibration(double activeSeconds) noexcept { strip_.gain().calibrator().requestStart(activeSeconds); }
@@ -78,6 +80,17 @@ public:
     /// Loads a de-bleed profile only (by id: "snare", "toms", "kick", "off").
     bool loadDrumProfile(const juce::String& id);
 
+    // Drum replacement kits (message thread). Each returns an error message, or empty on success.
+    juce::String loadStarterKit(const juce::String& id);
+    juce::String loadKitFiles(const juce::Array<juce::File>& files, const juce::String& kitName = {});
+    juce::String loadKitFolder(const juce::File& folder);
+    /// "starter:snare", "files:<path>\n<path>...", or empty (no kit).
+    juce::String kitSource() const;
+    juce::String kitName() const;
+    juce::String kitDescription() const;
+    /// Restores a kit from a kitSource() string (sessions, presets). Missing files are reported.
+    juce::String restoreKit(const juce::String& source);
+
     // ---- Channel presets (message thread) ----
     PresetManager& presetManager() noexcept { return presets_; }
     void setPresetDirectory(const juce::File& dir) { presets_ = PresetManager(dir); }
@@ -100,6 +113,7 @@ private:
     void applySettingsToParameters(const strip::ChannelSettings& preset);
     void applyGateToParameters(const gate::GateSettings& g);
     void applyDrumToParameters(const drum::DrumSettings& d);
+    void publishKit(std::unique_ptr<drum::SampleKit> kit, const juce::String& source);
     void setCurrentPreset(const juce::String& name, bool isUser, const strip::ChannelSettings& settings);
     void restorePresetReference();
 
@@ -109,6 +123,7 @@ private:
     ParameterReader reader_;
     strip::ChannelStrip strip_;
     PresetManager presets_;
+    juce::AudioFormatManager formats_;
     strip::ChannelSettings currentPresetSettings_ {};
 };
 

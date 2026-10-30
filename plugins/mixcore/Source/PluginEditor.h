@@ -4,6 +4,7 @@
 #include "ui/DrumPanel.h"
 #include "ui/GatePanel.h"
 #include "ui/ModuleUi.h"
+#include "ui/ReplacePanel.h"
 #include "ui/Meters.h"
 #include "ui/Theme.h"
 
@@ -35,6 +36,8 @@ public:
 
     enum class Page { SmartGain, Gate, Drums };
     void setPage(Page page);
+    /// Drums page: show the Replace view (true) or the De-bleed view (false).
+    void setDrumView(bool replace);
     void mouseUp(const juce::MouseEvent& e) override
     {
         if (e.eventComponent == &gateChip_)
@@ -92,7 +95,7 @@ private:
     juce::TextButton drumTab_ { "Drums" };
     PowerButton gainPower_ { "Smart Gain" };
     PowerButton gatePower_ { "Gate" };
-    PowerButton drumPower_ { "De-bleed" };
+    PowerButton drumPower_ { "Drums" };
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> gainPowerAtt_, gatePowerAtt_, drumPowerAtt_;
     ModuleOffBanner offBanner_;
     juce::ComboBox sourceBox_;
@@ -106,6 +109,12 @@ private:
     GateLearnPanel gateLearnPanel_ { processor_ };
     gate::GateTelemetry gateTelemetry_;
     DrumPanel drumPanel_ { processor_ };
+    ReplacePanel replacePanel_ { processor_ };
+    juce::TextButton debleedView_ { "De-bleed" };
+    juce::TextButton replaceView_ { "Replace" };
+    bool replaceViewShown_ = false;
+    drum::ReplaceTelemetry replaceTelemetry_;
+    int hitFlash_ = 0;
     juce::TextEditor drumInfoText_;
     drum::DeBleedTelemetry drumTelemetry_;
     juce::String lastDrumInfo_;

@@ -8,6 +8,7 @@ namespace {
 DrumSettings make(bool on, float amount, float xover, float lengthMs, float tolDb)
 {
     DrumSettings s;
+    s.moduleOn = on;
     s.debleedEnabled = on;
     s.debleedAmount = amount;
     s.debleedCrossoverHz = xover;

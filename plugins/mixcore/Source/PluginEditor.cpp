@@ -120,7 +120,7 @@ MixCoreEditor::MixCoreEditor(MixCoreProcessor& p) : AudioProcessorEditor(&p), pr
     riderChip_.setTooltip("Rider gain: slow automatic correction while the vocal is active.");
     guardChip_.setTooltip("Peak guard reduction: safety intervention, reported separately from riding.");
     styleChip(debleedChip_, theme::blueLight);
-    debleedChip_.setTooltip("Drum de-bleed: high-band bleed reduction (after Smart Gain, before the gate). Click to open the Drums page.");
+    debleedChip_.setTooltip("Drums: de-bleed reduction, or HIT when replacement triggers a sample. Click to open the Drums page.");
     styleChip(gateChip_, theme::good);
     gateChip_.setTooltip("Gate: gain reduction applied after Smart Gain. Click to open the Gate page.");
     for (auto* c : { &staticChip_, &riderChip_, &guardChip_, &debleedChip_, &gateChip_ })
@@ -144,13 +144,26 @@ MixCoreEditor::MixCoreEditor(MixCoreProcessor& p) : AudioProcessorEditor(&p), pr
     drumTab_.onClick = [this] { if (drumTab_.getToggleState()) setPage(Page::Drums); };
     debleedChip_.addMouseListener(this, false);
     addChildComponent(drumPanel_);
+    addChildComponent(replacePanel_);
+    for (auto* b : { &debleedView_, &replaceView_ })
+    {
+        b->setClickingTogglesState(true);
+        b->setRadioGroupId(4712);
+        b->setColour(juce::TextButton::buttonOnColourId, theme::blueDeep);
+        b->setColour(juce::TextButton::textColourOnId, theme::text);
+        addChildComponent(*b);
+    }
+    debleedView_.setTooltip("De-bleed: reduce cymbal and hi-hat bleed in this drum mic.");
+    replaceView_.setTooltip("Replace: trigger samples from this drum (replace or blend with the original).");
+    debleedView_.onClick = [this] { if (debleedView_.getToggleState()) setDrumView(false); };
+    replaceView_.onClick = [this] { if (replaceView_.getToggleState()) setDrumView(true); };
     styleReadout(drumInfoText_);
     addChildComponent(drumInfoText_);
 
     // Module power: one switch per module, on its tab. Only Smart Gain is on by default.
     gainPowerAtt_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(apvts, ids::smartGainOn, gainPower_);
     gatePowerAtt_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(apvts, ids::gateEnabled, gatePower_);
-    drumPowerAtt_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(apvts, ids::drumDebleed, drumPower_);
+    drumPowerAtt_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(apvts, ids::drumOn, drumPower_);
     for (auto* b : { &gainPower_, &gatePower_, &drumPower_ })
         addAndMakeVisible(*b);
     offBanner_.onTurnOn = [this] {
@@ -305,7 +318,12 @@ void MixCoreEditor::setPage(Page page)
         k->label.setVisible(gainPage && advanced_);
     }
     gatePanel_.setVisible(gatePage);
-    drumPanel_.setVisible(drumPage);
+    drumPanel_.setVisible(drumPage && !replaceViewShown_);
+    replacePanel_.setVisible(drumPage && replaceViewShown_);
+    debleedView_.setVisible(drumPage);
+    replaceView_.setVisible(drumPage);
+    debleedView_.setToggleState(!replaceViewShown_, juce::dontSendNotification);
+    replaceView_.setToggleState(replaceViewShown_, juce::dontSendNotification);
     drumInfoText_.setVisible(drumPage);
     lastDrumInfo_.clear();
 
@@ -379,10 +397,10 @@ void MixCoreEditor::paint(juce::Graphics& g)
     chipLabel("STATIC", staticChip_, gainOn_);
     chipLabel("RIDER", riderChip_, gainOn_);
     chipLabel("PEAK GUARD", guardChip_, gainOn_);
-    chipLabel("DE-BLEED", debleedChip_, drumOn_);
+    chipLabel("DRUMS", debleedChip_, drumOn_);
     chipLabel("GATE", gateChip_, gateOn_);
     g.setColour(theme::label);
-    g.drawText(page_ == Page::Gate ? "GATE THRESHOLD" : page_ == Page::Drums ? "DE-BLEED" : "CALIBRATION", juce::Rectangle<int>(getWidth() - 340, 66, 200, 16),
+    g.drawText(page_ == Page::Gate ? "GATE THRESHOLD" : page_ == Page::Drums ? (replaceViewShown_ ? "REPLACE" : "DE-BLEED") : "CALIBRATION", juce::Rectangle<int>(getWidth() - 340, 66, 200, 16),
                juce::Justification::centredLeft);
     g.drawText("MIX COACH", coachText_.getBounds().translated(0, -20).withHeight(16), juce::Justification::centredLeft);
 
@@ -477,7 +495,16 @@ void MixCoreEditor::resized()
 
     gatePanel_.setBounds(centre);
     offBanner_.setBounds(centre.withHeight(54));
-    drumPanel_.setBounds(centre);
+    {
+        auto drums = centre;
+        auto seg = drums.removeFromTop(26);
+        debleedView_.setBounds(seg.removeFromLeft(100));
+        seg.removeFromLeft(4);
+        replaceView_.setBounds(seg.removeFromLeft(100));
+        drums.removeFromTop(6);
+        drumPanel_.setBounds(drums);
+        replacePanel_.setBounds(drums);
+    }
 
     if (!advanced_)
     {
@@ -528,6 +555,13 @@ void MixCoreEditor::resized()
 
 void MixCoreEditor::timerCallback() { refresh(); }
 
+void MixCoreEditor::setDrumView(bool replace)
+{
+    replaceViewShown_ = replace;
+    lastDrumInfo_.clear();
+    setPage(Page::Drums);
+}
+
 gain::SourceType MixCoreEditor::source() const { return processor_.currentChannelSettings().source; }
 
 void MixCoreEditor::setParameter(const char* id, float plainValue)
@@ -545,7 +579,7 @@ void MixCoreEditor::updateModuleStates(bool force)
     const auto c = processor_.currentChannelSettings();
     gainOn_ = c.gainOn;
     gateOn_ = c.gate.enabled;
-    drumOn_ = c.drum.debleedEnabled;
+    drumOn_ = c.drum.moduleOn;
     const int key = (gainOn_ ? 1 : 0) | (gateOn_ ? 2 : 0) | (drumOn_ ? 4 : 0) | (static_cast<int>(page_) << 3)
                     | (advanced_ ? 64 : 0);
     if (!force && key == lastModuleKey_)
@@ -570,6 +604,7 @@ void MixCoreEditor::updateModuleStates(bool force)
     }
     gatePanel_.setAlpha(gateOn_ ? 1.0f : dim);
     drumPanel_.setAlpha(drumOn_ ? 1.0f : dim);
+    replacePanel_.setAlpha(drumOn_ ? 1.0f : dim);
 
     gainTab_.setColour(juce::TextButton::textColourOffId, gainOn_ ? theme::text : theme::muted.withAlpha(0.6f));
     gateTab_.setColour(juce::TextButton::textColourOffId, gateOn_ ? theme::text : theme::muted.withAlpha(0.6f));
@@ -577,7 +612,7 @@ void MixCoreEditor::updateModuleStates(bool force)
 
     const bool pageOff = (page_ == Page::SmartGain && !gainOn_) || (page_ == Page::Gate && !gateOn_)
                          || (page_ == Page::Drums && !drumOn_);
-    offBanner_.setModule(page_ == Page::SmartGain ? "Smart Gain" : page_ == Page::Gate ? "Gate" : "De-bleed");
+    offBanner_.setModule(page_ == Page::SmartGain ? "Smart Gain" : page_ == Page::Gate ? "Gate" : "Drums");
     offBanner_.setVisible(pageOff);
     if (pageOff)
         offBanner_.toFront(false);
@@ -604,15 +639,28 @@ void MixCoreEditor::refresh()
     const bool drumFresh = processor_.readDebleedTelemetry(drumTelemetry_);
     const auto& drumT = drumTelemetry_;
     drumPanel_.update(drumT, drumFresh);
-    if (!drumT.enabled)
+    const bool replFresh = processor_.readReplaceTelemetry(replaceTelemetry_);
+    const auto& replT = replaceTelemetry_;
+    replacePanel_.update(replT, replFresh);
+    if (replFresh && replT.hitsThisTick > 0)
+        hitFlash_ = 5; // ~170 ms
+    else if (hitFlash_ > 0)
+        --hitFlash_;
+    // DRUMS chip: replacement hits flash "HIT"; otherwise de-bleed reduction; otherwise "on".
+    if (hitFlash_ > 0 && replT.enabled)
     {
-        debleedChip_.setText("off", juce::dontSendNotification);
-        debleedChip_.setColour(juce::Label::textColourId, theme::muted);
+        debleedChip_.setText("HIT " + juce::String(juce::roundToInt(replT.lastVelocity * 100.0f)) + "%", juce::dontSendNotification);
+        debleedChip_.setColour(juce::Label::textColourId, theme::good);
     }
-    else
+    else if (drumT.enabled)
     {
         debleedChip_.setText(drumT.reductionDb < 0.5f ? "clean" : "-" + juce::String(drumT.reductionDb, 1) + " dB",
                              juce::dontSendNotification);
+        debleedChip_.setColour(juce::Label::textColourId, theme::blueLight);
+    }
+    else
+    {
+        debleedChip_.setText(replT.enabled ? "ready" : "on", juce::dontSendNotification);
         debleedChip_.setColour(juce::Label::textColourId, theme::blueLight);
     }
     if (page_ == Page::Gate)
@@ -668,7 +716,7 @@ void MixCoreEditor::refresh()
     for (auto* c : { &staticChip_, &riderChip_, &guardChip_ })
         setChipOff(*c, !gainOn_, c == &guardChip_ ? theme::safety : c == &staticChip_ ? theme::level : theme::rider);
     setChipOff(gateChip_, !gt.enabled, theme::good);
-    setChipOff(debleedChip_, !drumT.enabled, theme::blueLight);
+    setChipOff(debleedChip_, !drumOn_, theme::blueLight);
 
     if (page_ == Page::SmartGain)
         updateCalibrationUi();
@@ -679,7 +727,7 @@ void MixCoreEditor::refresh()
         updatePresetDisplay();
         if (page_ == Page::Drums)
         {
-            const auto info = drumPanel_.statusText(drumT);
+            const auto info = replaceViewShown_ ? replacePanel_.statusText(replT) : drumPanel_.statusText(drumT);
             if (info != lastDrumInfo_)
             {
                 lastDrumInfo_ = info;
@@ -750,7 +798,7 @@ void MixCoreEditor::updateCalibrationUi()
 void MixCoreEditor::updateCoach(const gain::SmartGainTelemetry& t)
 {
     const auto channel = processor_.currentChannelSettings();
-    const auto advice = strip::evaluateStripAdvice(t, gateTelemetry_, channel);
+    const auto advice = strip::evaluateStripAdvice(t, gateTelemetry_, channel, &replaceTelemetry_);
 
     juce::String key;
     key << static_cast<int>(channel.source) << (channel.gainOn ? "|on|" : "|off|");

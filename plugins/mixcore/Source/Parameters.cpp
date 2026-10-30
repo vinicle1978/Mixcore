@@ -82,6 +82,19 @@ const std::vector<DrumFloatParamSpec>& drumFloatParamSpecs()
         { ids::drumDebleedCrossover, "De-bleed Crossover", &D::debleedCrossoverHz, 1000.0f, 12000.0f, 10.0f, 4000.0f, "Hz", 0, false },
         { ids::drumDebleedLength, "De-bleed Length", &D::debleedLengthMs, 10.0f, 1000.0f, 1.0f, 150.0f, "ms", 0, false },
         { ids::drumDebleedTolerance, "De-bleed Tolerance", &D::debleedToleranceDb, 0.0f, 12.0f, 0.1f, 0.0f, "dB", 1, false },
+        { ids::replaceThreshold, "Replace Threshold", &D::replaceThresholdDb, -60.0f, 0.0f, 0.1f, 0.0f, "dBFS", 1, false },
+        { ids::replaceRetrigger, "Replace Retrigger", &D::replaceRetriggerMs, 5.0f, 500.0f, 1.0f, 60.0f, "ms", 0, false },
+        { ids::replaceDynamics, "Replace Dynamics", &D::replaceDynamics, 0.0f, 100.0f, 1.0f, 0.0f, "%", 0, false },
+        { ids::replaceRange, "Replace Range", &D::replaceRangeDb, 6.0f, 48.0f, 0.5f, 0.0f, "dB", 1, true },
+        { ids::replaceSample, "Replace Sample Level", &D::replaceSampleDb, -40.0f, 12.0f, 0.1f, 0.0f, "dB", 1, false },
+        { ids::replaceOriginal, "Replace Original Level", &D::replaceOriginalDb, -60.0f, 12.0f, 0.1f, 0.0f, "dB", 1, false },
+        { ids::replacePitch, "Replace Pitch", &D::replacePitchSt, -12.0f, 12.0f, 0.1f, 0.0f, "st", 1, false },
+        { ids::replaceAttack, "Replace Attack", &D::replaceAttackMs, 0.0f, 30.0f, 0.1f, 5.0f, "ms", 1, false },
+        { ids::replaceLength, "Replace Length", &D::replaceLengthMs, 20.0f, 2000.0f, 1.0f, 300.0f, "ms", 0, false },
+        { ids::replaceDetectLow, "Replace Detect Low", &D::replaceDetectLowHz, 20.0f, 2000.0f, 1.0f, 150.0f, "Hz", 0, true },
+        { ids::replaceDetectHigh, "Replace Detect High", &D::replaceDetectHighHz, 100.0f, 20000.0f, 10.0f, 2000.0f, "Hz", 0, true },
+        // Lookahead changes plugin latency: a setting, not automation.
+        { ids::replaceLookahead, "Replace Lookahead", &D::replaceLookaheadMs, 0.5f, 10.0f, 0.1f, 0.0f, "ms", 1, true, false },
     };
     return specs;
 }
@@ -89,7 +102,9 @@ const std::vector<DrumFloatParamSpec>& drumFloatParamSpecs()
 const std::vector<DrumBoolParamSpec>& drumBoolParamSpecs()
 {
     static const std::vector<DrumBoolParamSpec> specs {
+        { ids::drumOn, "Drums On", &D::moduleOn, true },
         { ids::drumDebleed, "De-bleed On", &D::debleedEnabled, true },
+        { ids::drumReplace, "Replace On", &D::replaceEnabled, true },
     };
     return specs;
 }
@@ -111,12 +126,19 @@ void addFloats(juce::AudioProcessorValueTreeState::ParameterLayout& layout, cons
         const int decimals = p.decimals;
         const juce::String unit(p.unit);
         const bool isRatio = juce::String(p.id) == ids::gateRatio;
+        const bool offAtMin = juce::String(p.id) == ids::replaceOriginal; // -60 dB = original off
+        const bool fullAtMax = juce::String(p.id) == ids::replaceLength;  // 2000 ms = whole sample
+        const float lo = p.min, hi = p.max;
         auto attributes = juce::AudioParameterFloatAttributes()
                               .withLabel(unit)
                               .withAutomatable(p.automatable)
-                              .withStringFromValueFunction([decimals, unit, isRatio](float v, int) {
+                              .withStringFromValueFunction([decimals, unit, isRatio, offAtMin, fullAtMax, lo, hi](float v, int) {
                                   if (isRatio && v >= gate::kHardGateRatio - 0.05f)
                                       return juce::String("Gate");
+                                  if (offAtMin && v <= lo + 0.05f)
+                                      return juce::String("Off");
+                                  if (fullAtMax && v >= hi - 0.5f)
+                                      return juce::String("Full");
                                   return juce::String(v, decimals) + (unit.isEmpty() ? "" : (unit == ":1" ? unit : " " + unit));
                               })
                               .withValueFromStringFunction([isRatio](const juce::String& t) {

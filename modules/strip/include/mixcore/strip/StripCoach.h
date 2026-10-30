@@ -11,6 +11,7 @@
 namespace mixcore::strip {
 
 std::vector<gain::Advice> evaluateStripAdvice(const gain::SmartGainTelemetry& gainT, const gate::GateTelemetry& gateT,
-                                              const ChannelSettings& settings);
+                                              const ChannelSettings& settings,
+                                              const drum::ReplaceTelemetry* replaceT = nullptr);
 
 } // namespace mixcore::strip
