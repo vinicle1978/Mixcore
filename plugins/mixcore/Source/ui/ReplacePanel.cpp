@@ -125,9 +125,21 @@ ReplacePanel::ReplacePanel(MixCoreProcessor& processor) : processor_(processor)
             "The detector ignores content below this (e.g. 150 Hz on snare ignores the kick).");
     addKnob(ids::replaceDetectHigh, "Detect High", theme::level,
             "The detector ignores content above this (e.g. 200 Hz on kick ignores snare and cymbals).");
-    addKnob(ids::replaceSample, "Sample", theme::blueLight, "Level of the triggered samples.");
+    addKnob(ids::replaceMix, "MIX", theme::blueLight,
+            "Blend between the original drum and the samples. 0 % = original only, 50 % = both at full level "
+            "(augmentation: the sample adds to the real drum), 100 % = samples only (full replacement).");
+    {
+        // The most important replacement control: drawn bigger, with its own style.
+        auto& mix = *knobs_.back();
+        mix.slider.getProperties().set("hero", true);
+        mix.slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 90, 22);
+        mix.label.setFont(theme::font(15.0f, true));
+        mix.label.setColour(juce::Label::textColourId, theme::text);
+        heroIndex_ = knobs_.size() - 1;
+    }
+    addKnob(ids::replaceSample, "Sample", theme::blueLight, "Level trim for the samples (applied with Mix).");
     addKnob(ids::replaceOriginal, "Original", theme::silver,
-            "Level of the original drum. Off = pure replacement; equal levels = augmentation (blend).");
+            "Level trim for the original drum (applied with Mix). Off = never heard, whatever the Mix."); 
     addKnob(ids::replacePitch, "Pitch", theme::level, "Tune the samples in semitones.");
     addKnob(ids::replaceAttack, "Attack", theme::level,
             "Fades in the start of each sample. 0 = full transient; a few ms softens a hard click.");
@@ -273,7 +285,8 @@ juce::String ReplacePanel::statusText(const drum::ReplaceTelemetry& t) const
          "MixCore listens to the drum mic (before the gate), detects each hit and its strength, and plays a sample from "
          "the kit - softer hits pick softer samples (velocity layers), repeated hits alternate between variations (round "
          "robin). The sample starts exactly on the hit, so it stays in phase with the original.\n\n"
-         "Blend with Original: Off = pure replacement, both up = augmentation.\n\n"
+         "Mix: 0 % = original only, 50 % = original and sample both at full level (augmentation), 100 % = sample "
+         "only (replacement). Sample and Original trim each side.\n\n"
          "Your own samples\n"
          "Load several WAV/AIFF files of one drum at different strengths (or a kit folder). MixCore sorts them by "
          "loudness into layers automatically.\n\n"
@@ -281,6 +294,20 @@ juce::String ReplacePanel::statusText(const drum::ReplaceTelemetry& t) const
          "In Live mode the strength is measured over 1.5 ms, which is enough for snare and toms; kicks with slow attacks "
          "follow the dynamics better in Studio mode. Check by ear that ghost notes trigger and bleed does not.";
     return s;
+}
+
+void ReplacePanel::paint(juce::Graphics& g)
+{
+    // Frame around the MIX knob so it reads as the main control.
+    if (!heroArea_.isEmpty())
+    {
+        const auto r = heroArea_.toFloat();
+        g.setGradientFill(juce::ColourGradient(theme::blueDeep.withAlpha(0.35f), r.getCentreX(), r.getY(),
+                                               theme::panel.withAlpha(0.2f), r.getCentreX(), r.getBottom(), false));
+        g.fillRoundedRectangle(r, 8.0f);
+        g.setColour(theme::safety.withAlpha(0.55f)); // red frame: the main control
+        g.drawRoundedRectangle(r.reduced(0.5f), 8.0f, 1.4f);
+    }
 }
 
 void ReplacePanel::resized()
@@ -299,15 +326,29 @@ void ReplacePanel::resized()
 
     auto knobs = area.removeFromBottom(178);
     history_.setBounds(area.withTrimmedBottom(6));
+    // Left: the big MIX knob over both rows (with a framed panel, see paint()).
+    // Right: row 1 detection (5 knobs), row 2 sound (Sample, Original, Pitch, Attack, Length).
+    heroArea_ = knobs.removeFromLeft(juce::jmax(120, knobs.getWidth() / 4));
+    knobs.removeFromLeft(8);
+    {
+        auto& mix = *knobs_[heroIndex_];
+        auto cell = heroArea_.reduced(6, 4);
+        mix.label.setBounds(cell.removeFromTop(20));
+        mix.slider.setBounds(cell);
+    }
+    std::vector<Knob*> others;
+    for (size_t i = 0; i < knobs_.size(); ++i)
+        if (i != heroIndex_)
+            others.push_back(knobs_[i].get());
     const int perRow = 5;
     const int rowH = knobs.getHeight() / 2;
-    for (size_t i = 0; i < knobs_.size(); ++i)
+    const int cw = knobs.getWidth() / perRow;
+    for (size_t i = 0; i < others.size(); ++i)
     {
         const int row = static_cast<int>(i) / perRow, col = static_cast<int>(i) % perRow;
-        const int cw = knobs.getWidth() / perRow;
         auto cell = juce::Rectangle<int>(knobs.getX() + col * cw, knobs.getY() + row * rowH, cw, rowH).reduced(2, 1);
-        knobs_[i]->label.setBounds(cell.removeFromTop(15));
-        knobs_[i]->slider.setBounds(cell);
+        others[i]->label.setBounds(cell.removeFromTop(15));
+        others[i]->slider.setBounds(cell);
     }
 }
 

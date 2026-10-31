@@ -189,6 +189,11 @@ public:
     void drawRotarySlider(juce::Graphics& g, int x, int y, int w, int h, float pos, float startAngle,
                           float endAngle, juce::Slider& slider) override
     {
+        if (slider.getProperties()["hero"])
+        {
+            drawHeroKnob(g, x, y, w, h, pos, startAngle, endAngle);
+            return;
+        }
         const auto bounds = juce::Rectangle<float>(static_cast<float>(x), static_cast<float>(y),
                                                    static_cast<float>(w), static_cast<float>(h))
                                 .reduced(4.0f);
@@ -230,6 +235,69 @@ public:
         const juce::Point<float> tip(centre.x + inner * 0.8f * std::sin(a1), centre.y - inner * 0.8f * std::cos(a1));
         g.setColour(text);
         g.drawLine(juce::Line<float>(centre.getPointOnCircumference(inner * 0.25f, a1), tip), 2.0f);
+    }
+
+    /// The "hero" knob (e.g. replacement Mix): bigger, thicker ring that runs
+    /// from silver (original) to blue (sample), a marker at the centre (50 %),
+    /// end captions, and red accents (rim, pointer, end dot, glow) to mark it as
+    /// the main control.
+    void drawHeroKnob(juce::Graphics& g, int x, int y, int w, int h, float pos, float startAngle, float endAngle)
+    {
+        auto bounds = juce::Rectangle<float>(static_cast<float>(x), static_cast<float>(y), static_cast<float>(w),
+                                             static_cast<float>(h))
+                          .reduced(2.0f);
+        auto captions = bounds.removeFromBottom(14.0f);
+        const float radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f;
+        const auto centre = bounds.getCentre();
+        const float thickness = juce::jmax(5.0f, radius * 0.17f);
+        const float arcR = radius - thickness * 0.6f;
+
+        // Soft red glow behind the knob (the hero knob is the one red accent outside warnings).
+        g.setColour(safety.withAlpha(0.10f));
+        g.fillEllipse(juce::Rectangle<float>(radius * 2.2f, radius * 2.2f).withCentre(centre));
+
+        juce::Path track;
+        track.addCentredArc(centre.x, centre.y, arcR, arcR, 0.0f, startAngle, endAngle, true);
+        g.setColour(panelEdge.brighter(0.15f));
+        g.strokePath(track, juce::PathStrokeType(thickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+        const float a1 = startAngle + pos * (endAngle - startAngle);
+        juce::Path fill;
+        fill.addCentredArc(centre.x, centre.y, arcR, arcR, 0.0f, startAngle, a1, true);
+        juce::ColourGradient grad(silver, centre.x - radius, centre.y, blueLight, centre.x + radius, centre.y, false);
+        grad.addColour(0.5, ice);
+        g.setGradientFill(grad);
+        g.strokePath(fill, juce::PathStrokeType(thickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+        // Centre marker (50 % = both at full level).
+        const float mid = 0.5f * (startAngle + endAngle);
+        g.setColour(text.withAlpha(0.85f));
+        g.drawLine(juce::Line<float>(centre.getPointOnCircumference(arcR + thickness * 0.7f, mid),
+                                     centre.getPointOnCircumference(arcR + thickness * 1.5f, mid)),
+                   2.0f);
+
+        // Body with a brushed-silver rim.
+        const float inner = arcR - thickness * 1.1f;
+        const auto body = juce::Rectangle<float>(inner * 2.0f, inner * 2.0f).withCentre(centre);
+        g.setGradientFill(juce::ColourGradient(juce::Colour(0xff2b3646), body.getCentreX(), body.getY(), juce::Colour(0xff080c13),
+                                               body.getCentreX(), body.getBottom(), false));
+        g.fillEllipse(body);
+        g.setGradientFill(redGradient(body));
+        g.drawEllipse(body, 2.2f); // red rim
+        const juce::Point<float> tip(centre.x + inner * 0.82f * std::sin(a1), centre.y - inner * 0.82f * std::cos(a1));
+        g.setColour(safety.brighter(0.15f));
+        g.drawLine(juce::Line<float>(centre.getPointOnCircumference(inner * 0.3f, a1), tip), 3.2f); // red pointer
+        // Red dot where the ring ends, so the position reads at a glance.
+        g.setColour(safety);
+        g.fillEllipse(juce::Rectangle<float>(thickness * 0.9f, thickness * 0.9f)
+                          .withCentre(centre.getPointOnCircumference(arcR, a1)));
+
+        // End captions.
+        g.setFont(font(10.0f, true));
+        g.setColour(silver);
+        g.drawText("ORIGINAL", captions.withWidth(captions.getWidth() * 0.5f), juce::Justification::centredLeft);
+        g.setColour(blueLight);
+        g.drawText("SAMPLE", captions.withTrimmedLeft(captions.getWidth() * 0.5f), juce::Justification::centredRight);
     }
 
     void drawProgressBar(juce::Graphics& g, juce::ProgressBar&, int width, int height, double progress,
