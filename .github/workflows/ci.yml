@@ -19,7 +19,7 @@ jobs:
       matrix:
         include:
           - name: "macOS universal (Apple Silicon + Intel)"
-            os: macos-15
+            os: macos-14
             configure: -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DMIXCORE_WARNINGS_AS_ERRORS=OFF
             test-prefix: ""
           - name: "Windows x64"
