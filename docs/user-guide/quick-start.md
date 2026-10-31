@@ -93,6 +93,22 @@ cymbal bleed in the high end, even while the gate is open, without touching the
 drum's body and with no added latency. Snare/Toms presets switch it on. See
 [presets.md](presets.md#drum-de-bleed).
 
+## 8c. EQ (optional)
+
+The **EQ** tab is a 7-band parametric EQ (high-pass, low shelf, three bells,
+high shelf, low-pass) with a live spectrum behind the curve. It adds no
+latency. Switch it on with its power button or **EQ ON**.
+
+* **Load EQ profile...** gives a starting curve for the source. Channel presets
+  already prepare one, with the EQ off.
+* Drag a point to move a band (left/right = frequency, up/down = gain). Use the
+  mouse wheel over a point to change its width (Q), and double-click a point to
+  switch that band on or off. The knobs under the curve edit the selected band.
+* **Listen & suggest:** play the source normally for 8 seconds. MixCore
+  suggests a few moves, such as a high-pass, a resonance cut, less mud,
+  less harshness or more air, and says why. **Nothing changes until you press
+  Apply.** Trust your ears over the suggestions.
+
 ## 9. Mix Coach
 
 The coach panel explains anything worth attention — what was detected, why it

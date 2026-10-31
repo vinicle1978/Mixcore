@@ -158,6 +158,11 @@ TEST_CASE("The full channel strip (Smart Gain + De-bleed + Gate) never allocates
         s.drum.replacePitchSt = static_cast<float>(block % 9) - 4.0f;
         s.drum.replaceThresholdDb = -30.0f;
         s.drum.replaceLengthMs = (block % 2) ? 2000.0f : 120.0f;
+        s.eq.enabled = (block / 47) % 3 != 1;                            // EQ on/off
+        s.eq.bands[0].on = (block / 29) % 2 == 0;
+        s.eq.bands[0].slope = (block / 71) % 2 ? 48.0f : 12.0f;           // section count changes
+        s.eq.bands[3].gainDb = static_cast<float>(block % 13) - 6.0f;     // coefficient glides
+        s.eq.bands[3].freqHz = 200.0f + static_cast<float>(block % 17) * 300.0f;
         if (block == 400)
             strip.debleed().resetLearning();
         float* ptrs[2] = { l.data() + pos, r.data() + pos };

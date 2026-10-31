@@ -18,14 +18,18 @@ a multi-channel audio engine, channel registry and routing do not exist yet).
                 │ settings (atomics → struct)    │ telemetry (triple buffer)
 ┌───────────────┴───────────────────────────────┴────────────────┐
 │ modules/strip    (mixcore::strip) ChannelStrip:                │
-│                  Gain -> De-bleed -> Gate,                     │
+│                  Gain -> De-bleed -> Gate -> Replace -> EQ,    │
 │                  channel presets, strip-level Mix Coach        │
 ├────────────────────────────────────────────────────────────────┤
 │ modules/gate     (mixcore::gate, no JUCE)                      │
 │   NoiseGate, GateLearner, GateProfiles, GateSettings           │
 ├────────────────────────────────────────────────────────────────┤
 │ modules/drum     (mixcore::drum, no JUCE)                      │
-│   DeBleed, DrumProfiles, DrumSettings (replacement: planned)   │
+│   DeBleed, DrumReplacer, SampleKit, StarterKits, DrumSettings  │
+├────────────────────────────────────────────────────────────────┤
+│ modules/eq       (mixcore::eq, no JUCE)                        │
+│   ParametricEq, EqFilters, SpectrumTap, Spectrum (FFT),        │
+│   EqCoach (Listen & suggest), EqProfiles, EqSettings           │
 ├────────────────────────────────────────────────────────────────┤
 │ modules/gain     (mixcore::gain, no JUCE)                      │
 │   SmartGainStage   ── realtime processor                       │

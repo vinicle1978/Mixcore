@@ -44,13 +44,18 @@ Stage**.
   6 ms. Your own WAV/AIFF files or a kit folder (auto-sorted into velocity
   layers) or the original starter kits (kick, snare, tom).
   [Replacement spec](docs/dsp/drum-replacement.md)
-* **Module power**: each module (Smart Gain, Gate, Drums) has its own on/off;
+* **Parametric EQ** (new, EQ tab): 7 bands (HP/LP 12/24/48 dB/oct, shelves,
+  3 bells), double-precision biquads, smoothed and click-free, **zero latency**,
+  live analyzer with draggable curve, source profiles, and **Listen & suggest**
+  (spectral rules, no ML) whose suggestions apply only when you press Apply.
+  [EQ spec](docs/dsp/eq.md)
+* **Module power**: each module (Smart Gain, Gate, Drums, EQ) has its own on/off;
   only Smart Gain is on by default.
 * **MixCore plugin + standalone app** (JUCE 8): VST3, AU (macOS), Standalone,
   with host parameters, state save/restore, host bypass, latency reporting and
   an editor showing live meters, gain chain, 20 s rider history, calibration
   and Mix Coach.
-* **122 automated tests** (unit, integration, regression, realtime, performance,
+* **140 automated tests** (unit, integration, regression, realtime, performance,
   plugin) — all passing on Linux; engine also passes under Clang/libc++
   `-Werror`, ASan/UBSan and TSan. Details: [`docs/testing/test-plan.md`](docs/testing/test-plan.md).
 
@@ -145,7 +150,7 @@ docs/              architecture, DSP spec, testing, user guide
 1. ~~Repository & architecture~~ ✔
 2. Audio foundation: multi-channel engine, channel state, routing — *partly (meters, realtime checks)*
 3. ~~Smart Gain Stage~~ ✔ (pending listening tests)
-4. ~~Gate/expander~~ ✔, ~~drum de-bleed~~ ✔, ~~drum replacement~~ ✔ (pending listening tests), parametric EQ, compressor, saturation
+4. ~~Gate/expander~~ ✔, ~~drum de-bleed~~ ✔, ~~drum replacement~~ ✔, ~~parametric EQ~~ ✔ (pending listening tests), compressor, saturation
 5. Channel registry, shared analysis, recommendations (preview/apply/undo)
 6. Master bus, loudness & true peak, tonal analysis, LiveMixing / LiveStreaming
 7. Standalone live mixer: strips, buses, scenes, Mix Coach, setup wizard

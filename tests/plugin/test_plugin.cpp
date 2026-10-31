@@ -12,6 +12,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
+#include <algorithm>
 #include <cstdlib>
 
 using namespace mixcore;
@@ -668,7 +669,7 @@ TEST_CASE("User presets include de-bleed; older presets load with it off", "[plu
     setParam(p, ids::drumDebleedLength, 220.0f);
     REQUIRE(p.saveUserPreset("Church Snare").isEmpty());
     const auto text = temp.dir.getChildFile("Church Snare.mixpreset").loadFileAsString();
-    CHECK(text.contains("version=\"4\""));
+    CHECK(text.contains("version=\"5\""));
     CHECK(text.contains("<Drum>"));
 
     MixCoreProcessor q;
@@ -800,7 +801,7 @@ TEST_CASE("User presets keep source type and module power; older files default t
     setParam(p, ids::smartGainOn, 0.0f);
     REQUIRE(p.saveUserPreset("Snare no gain").isEmpty());
     const auto text = temp.dir.getChildFile("Snare no gain.mixpreset").loadFileAsString();
-    CHECK(text.contains("version=\"4\""));
+    CHECK(text.contains("version=\"5\""));
     CHECK(text.contains("source=\"Drum\""));
 
     MixCoreProcessor q;
@@ -1061,4 +1062,228 @@ TEST_CASE("Replacement Mix is continuous (any value, 0.1 % resolution)", "[plugi
         CHECK(p.currentChannelSettings().drum.replaceMix == Approx(v).margin(0.051f));
     }
     CHECK(p.state().getParameter(ids::replaceMix)->getText(p.state().getParameter(ids::replaceMix)->convertTo0to1(61.7f), 16) == "61.7 %");
+}
+
+// ------------------------------------------------------------------ EQ
+
+namespace {
+float rmsDb(const juce::AudioBuffer<float>& b, int from)
+{
+    double sum = 0.0;
+    for (int i = from; i < b.getNumSamples(); ++i)
+        sum += static_cast<double>(b.getSample(0, i)) * static_cast<double>(b.getSample(0, i));
+    return static_cast<float>(10.0 * std::log10(sum / (b.getNumSamples() - from) + 1e-20));
+}
+
+float runSineThrough(MixCoreProcessor& p, double freq)
+{
+    p.setPlayConfigDetails(1, 1, 48000.0, 480);
+    p.prepareToPlay(48000.0, 480);
+    juce::AudioBuffer<float> block(1, 480), all(1, 48000);
+    juce::MidiBuffer midi;
+    for (int b = 0; b < 100; ++b)
+    {
+        for (int i = 0; i < 480; ++i)
+            block.setSample(0, i, 0.1f * static_cast<float>(std::sin(2.0 * juce::MathConstants<double>::pi * freq * (b * 480 + i) / 48000.0)));
+        p.processBlock(block, midi);
+        all.copyFrom(0, b * 480, block, 0, 0, 480);
+    }
+    return rmsDb(all, 24000);
+}
+} // namespace
+
+TEST_CASE("EQ parameters: off by default, 7 bands, safe defaults", "[plugin][eq][params]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    const auto e = p.currentChannelSettings().eq;
+    CHECK_FALSE(e.enabled);
+    for (int b = 0; b < eq::kNumBands; ++b)
+    {
+        CHECK(p.state().getParameter(eqParamId(b, EqField::On)) != nullptr);
+        CHECK(p.state().getParameter(eqParamId(b, EqField::Freq)) != nullptr);
+        CHECK((p.state().getParameter(eqParamId(b, EqField::Gain)) != nullptr) == eqBandHasGain(b));
+        CHECK((p.state().getParameter(eqParamId(b, EqField::Slope)) != nullptr) == eqBandHasSlope(b));
+    }
+    // The first preset (Lead Vocal) prepares a vocal starting curve, but the EQ
+    // stays off until the user switches it on.
+    CHECK(e.bands[0].on);
+    CHECK(e.bands[0].freqHz == Approx(90.0f).margin(0.5));
+    CHECK_FALSE(e.bands[6].on);
+    CHECK_FALSE(p.isPresetModified()); // a fresh instance matches its first preset
+}
+
+TEST_CASE("EQ shapes audio in the plugin with zero added latency", "[plugin][eq][audio]")
+{
+    JuceEnv env;
+    MixCoreProcessor flat;
+    setParam(flat, ids::smartGainOn, 0.0f);
+    const float before = runSineThrough(flat, 1000.0);
+    const int latencyOff = flat.getLatencySamples();
+
+    MixCoreProcessor boosted;
+    setParam(boosted, ids::smartGainOn, 0.0f);
+    setParam(boosted, ids::eqOn, 1.0f);
+    setParam(boosted, eqParamId(3, EqField::Freq).toRawUTF8(), 1000.0f);
+    setParam(boosted, eqParamId(3, EqField::Gain).toRawUTF8(), 9.0f);
+    const float after = runSineThrough(boosted, 1000.0);
+    CHECK(after - before == Approx(9.0).margin(0.3));
+    CHECK(boosted.getLatencySamples() == latencyOff);
+
+    // Band switched off -> back to unity.
+    MixCoreProcessor bandOff;
+    setParam(bandOff, ids::smartGainOn, 0.0f);
+    setParam(bandOff, ids::eqOn, 1.0f);
+    setParam(bandOff, eqParamId(3, EqField::Gain).toRawUTF8(), 9.0f);
+    setParam(bandOff, eqParamId(3, EqField::On).toRawUTF8(), 0.0f);
+    CHECK(runSineThrough(bandOff, 1000.0) - before == Approx(0.0).margin(0.1));
+}
+
+TEST_CASE("EQ profiles load onto the parameters and switch the EQ on", "[plugin][eq][profiles]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    REQUIRE(p.loadEqProfile("Lead Vocal"));
+    const auto e = p.currentChannelSettings().eq;
+    CHECK(e.enabled);
+    CHECK(e.bands[0].on);
+    CHECK(e.bands[0].freqHz == Approx(90.0f).margin(0.5));
+    CHECK(e.bands[2].gainDb == Approx(-2.0f).margin(0.05));
+    CHECK_FALSE(p.loadEqProfile("No Such Profile"));
+}
+
+TEST_CASE("Listen & suggest: suggestions only change the EQ when applied", "[plugin][eq][coach]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    setParam(p, ids::smartGainOn, 0.0f);
+    p.setPlayConfigDetails(1, 1, 48000.0, 480);
+    p.prepareToPlay(48000.0, 480);
+    const auto before = p.currentChannelSettings().eq;
+    p.startEqListen(4.0);
+    REQUIRE(p.eqListening());
+
+    // Noise with a strong ringing resonance at 2.5 kHz.
+    juce::Random rng(21);
+    juce::AudioBuffer<float> block(1, 480);
+    juce::MidiBuffer midi;
+    for (int b = 0; b < 1200 && p.eqListening(); ++b)
+    {
+        for (int i = 0; i < 480; ++i)
+            block.setSample(0, i, 0.05f * (rng.nextFloat() * 2.0f - 1.0f)
+                                      + 0.2f * static_cast<float>(std::sin(2.0 * juce::MathConstants<double>::pi * 2500.0 * (b * 480 + i) / 48000.0)));
+        p.processBlock(block, midi);
+        p.pumpEqListener();
+    }
+    REQUIRE(p.eqListenReady());
+    const auto suggestions = p.eqSuggestions();
+    REQUIRE_FALSE(suggestions.empty());
+    CHECK(suggestions.size() <= 5);
+    // Listening alone changed nothing.
+    CHECK(eq::approximatelyEqual(p.currentChannelSettings().eq, before, 1e-4f));
+
+    const auto it = std::find_if(suggestions.begin(), suggestions.end(), [](const auto& s) { return s.id == "resonance"; });
+    REQUIRE(it != suggestions.end());
+    CHECK(it->settings.gainDb < 0.0f);
+    CHECK(it->settings.freqHz == Approx(2500.0f).epsilon(0.15));
+    p.applyEqSuggestion(*it);
+    const auto e = p.currentChannelSettings().eq;
+    CHECK(e.enabled);
+    const auto& band = e.bands[static_cast<size_t>(it->band)];
+    CHECK(band.on);
+    CHECK(band.freqHz == Approx(it->settings.freqHz).epsilon(0.01));
+    CHECK(band.gainDb == Approx(it->settings.gainDb).margin(0.05));
+}
+
+TEST_CASE("User presets include the EQ; older presets load with it off", "[plugin][eq][presets]")
+{
+    JuceEnv env;
+    TempPresetDir temp;
+    MixCoreProcessor p;
+    p.setPresetDirectory(temp.dir);
+    REQUIRE(p.loadEqProfile("Speech"));
+    setParam(p, eqParamId(4, EqField::Gain).toRawUTF8(), 3.5f);
+    REQUIRE(p.saveUserPreset("Pastor").isEmpty());
+    const auto text = temp.dir.getChildFile("Pastor.mixpreset").loadFileAsString();
+    CHECK(text.contains("version=\"5\""));
+    CHECK(text.contains("<Eq>"));
+
+    MixCoreProcessor q;
+    q.setPresetDirectory(temp.dir);
+    REQUIRE(q.loadUserPreset("Pastor"));
+    const auto e = q.currentChannelSettings().eq;
+    CHECK(e.enabled);
+    CHECK(e.bands[0].on);
+    CHECK(e.bands[4].gainDb == Approx(3.5f).margin(0.05));
+    CHECK_FALSE(q.isPresetModified());
+
+    temp.dir.getChildFile("Old.mixpreset")
+        .replaceWithText("<?xml version=\"1.0\"?><MixCorePreset version=\"4\" module=\"SmartGain\" name=\"Old\">"
+                         "<Settings>targetRmsDb=-20;</Settings></MixCorePreset>");
+    REQUIRE(q.loadUserPreset("Old"));
+    CHECK_FALSE(q.currentChannelSettings().eq.enabled);
+}
+
+TEST_CASE("EQ page renders", "[plugin][eq][editor]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    p.loadFactoryPreset("Lead Vocal - Natural");
+    REQUIRE(p.loadEqProfile("Lead Vocal"));
+    p.setPlayConfigDetails(1, 1, 48000.0, 480);
+    p.prepareToPlay(48000.0, 480);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
+    auto& ed = dynamic_cast<MixCoreEditor&>(*editor);
+    ed.setPage(MixCoreEditor::Page::Eq);
+    p.startEqListen(3.0);
+
+    // Voice-like: harmonics of 180 Hz plus breathy noise, with a 600 Hz honk.
+    juce::Random rng(3);
+    juce::AudioBuffer<float> block(1, 480);
+    juce::MidiBuffer midi;
+    float lp = 0.0f;
+    for (int b = 0; b < 500; ++b)
+    {
+        for (int i = 0; i < 480; ++i)
+        {
+            const double t = (b * 480 + i) / 48000.0;
+            float v = 0.0f;
+            // Sung melody: the pitch moves (as real voices do), so its harmonics spread out.
+            constexpr double twoPi = 2.0 * juce::MathConstants<double>::pi;
+            const double phase = twoPi * (180.0 * t + 40.0 * std::sin(twoPi * 0.7 * t) / (twoPi * 0.7));
+            for (int h = 1; h <= 20; ++h)
+                v += (0.15f / static_cast<float>(h)) * static_cast<float>(std::sin(phase * h));
+            v += 0.12f * static_cast<float>(std::sin(2.0 * juce::MathConstants<double>::pi * 600.0 * t));
+            lp += 0.3f * ((rng.nextFloat() * 2.0f - 1.0f) - lp);
+            block.setSample(0, i, v + 0.03f * lp);
+        }
+        p.processBlock(block, midi);
+        p.pumpEqListener();
+        if (b % 4 == 0)
+            ed.refresh();
+    }
+    for (int k = 0; k < 12; ++k)
+        ed.refresh();
+    const auto image = ed.createComponentSnapshot(ed.getLocalBounds(), true, 1.0f);
+    CHECK(image.getWidth() == ed.getWidth());
+    if (const char* outDir = std::getenv("MIXCORE_SNAPSHOT_DIR"))
+    {
+        juce::File f(juce::String(outDir) + "/mixcore-eq.png");
+        f.deleteFile();
+        juce::FileOutputStream stream(f);
+        juce::PNGImageFormat().writeImageToStream(image, stream);
+    }
+
+    // EQ off: banner, page still usable.
+    setParam(p, ids::eqOn, 0.0f);
+    for (int k = 0; k < 3; ++k)
+        ed.refresh();
+    const auto offImage = ed.createComponentSnapshot(ed.getLocalBounds(), true, 1.0f);
+    if (const char* outDir = std::getenv("MIXCORE_SNAPSHOT_DIR"))
+    {
+        juce::File f(juce::String(outDir) + "/mixcore-eq-off.png");
+        f.deleteFile();
+        juce::FileOutputStream stream(f);
+        juce::PNGImageFormat().writeImageToStream(offImage, stream);
+    }
 }

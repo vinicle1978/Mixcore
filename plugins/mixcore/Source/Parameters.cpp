@@ -176,6 +176,20 @@ void bind(juce::AudioProcessorValueTreeState& state, const std::vector<Spec>& sp
 
 } // namespace
 
+juce::String eqParamId(int band, EqField field)
+{
+    static const char* suffix[] = { "On", "Freq", "Gain", "Q", "Slope" };
+    return "eqB" + juce::String(band) + suffix[static_cast<int>(field)];
+}
+
+bool eqBandHasGain(int band)
+{
+    const auto t = eq::EqSettings::type(band);
+    return t != eq::BandType::HighPass && t != eq::BandType::LowPass;
+}
+
+bool eqBandHasSlope(int band) { return !eqBandHasGain(band); }
+
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 {
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
@@ -194,6 +208,40 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
         sources.add(gain::words(gain::sourceFromIndex(i)).name);
     layout.add(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID { ids::sourceType, 1 }, "Source", sources, 0,
                                                             juce::AudioParameterChoiceAttributes().withAutomatable(false)));
+
+    // ---- EQ -----------------------------------------------------------------
+    const eq::EqSettings eqDefaults;
+    layout.add(std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ids::eqOn, 1 }, "EQ On", eqDefaults.enabled));
+    const auto dbText = [](float v, int) { return (v > 0.0f ? "+" : "") + juce::String(v, 1) + " dB"; };
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ids::eqOutput, 1 }, "EQ Output", juce::NormalisableRange<float>(-18.0f, 18.0f, 0.1f), eqDefaults.outputDb,
+        juce::AudioParameterFloatAttributes().withLabel("dB").withStringFromValueFunction(dbText)));
+    for (int b = 0; b < eq::kNumBands; ++b)
+    {
+        const auto& d = eqDefaults.bands[static_cast<size_t>(b)];
+        const juce::String name = juce::String("EQ ") + eq::EqSettings::bandName(b);
+        layout.add(std::make_unique<juce::AudioParameterBool>(juce::ParameterID { eqParamId(b, EqField::On), 1 }, name + " On", d.on));
+        juce::NormalisableRange<float> fr(20.0f, 20000.0f, 1.0f);
+        fr.setSkewForCentre(632.0f); // geometric centre of 20 Hz .. 20 kHz
+        layout.add(std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID { eqParamId(b, EqField::Freq), 1 }, name + " Freq", fr, d.freqHz,
+            juce::AudioParameterFloatAttributes().withLabel("Hz").withStringFromValueFunction([](float v, int) {
+                return v >= 1000.0f ? juce::String(v / 1000.0f, v >= 10000.0f ? 1 : 2) + " kHz" : juce::String(juce::roundToInt(v)) + " Hz";
+            })));
+        if (eqBandHasGain(b))
+            layout.add(std::make_unique<juce::AudioParameterFloat>(
+                juce::ParameterID { eqParamId(b, EqField::Gain), 1 }, name + " Gain", juce::NormalisableRange<float>(-18.0f, 18.0f, 0.1f),
+                d.gainDb, juce::AudioParameterFloatAttributes().withLabel("dB").withStringFromValueFunction(dbText)));
+        juce::NormalisableRange<float> qr(0.1f, 10.0f, 0.01f);
+        qr.setSkewForCentre(1.0f);
+        layout.add(std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID { eqParamId(b, EqField::Q), 1 }, name + " Q", qr, d.q,
+            juce::AudioParameterFloatAttributes().withStringFromValueFunction([](float v, int) { return juce::String(v, 2); })));
+        if (eqBandHasSlope(b))
+            layout.add(std::make_unique<juce::AudioParameterChoice>(
+                juce::ParameterID { eqParamId(b, EqField::Slope), 1 }, name + " Slope",
+                juce::StringArray { "12 dB/oct", "24 dB/oct", "48 dB/oct" }, d.slope < 18.0f ? 0 : (d.slope < 36.0f ? 1 : 2)));
+    }
     return layout;
 }
 
@@ -205,6 +253,18 @@ ParameterReader::ParameterReader(juce::AudioProcessorValueTreeState& state)
     bind<G>(state, gateBoolParamSpecs(), gateBools_);
     bind<D>(state, drumFloatParamSpecs(), drumFloats_);
     bind<D>(state, drumBoolParamSpecs(), drumBools_);
+    eqOn_ = state.getRawParameterValue(ids::eqOn);
+    eqOut_ = state.getRawParameterValue(ids::eqOutput);
+    for (int b = 0; b < eq::kNumBands; ++b)
+    {
+        auto& r = eqBands_[static_cast<size_t>(b)];
+        r.on = state.getRawParameterValue(eqParamId(b, EqField::On));
+        r.freq = state.getRawParameterValue(eqParamId(b, EqField::Freq));
+        r.gain = eqBandHasGain(b) ? state.getRawParameterValue(eqParamId(b, EqField::Gain)) : nullptr;
+        r.q = state.getRawParameterValue(eqParamId(b, EqField::Q));
+        r.slope = eqBandHasSlope(b) ? state.getRawParameterValue(eqParamId(b, EqField::Slope)) : nullptr;
+        jassert(r.on != nullptr && r.freq != nullptr && r.q != nullptr);
+    }
     gainOn_ = state.getRawParameterValue(ids::smartGainOn);
     source_ = state.getRawParameterValue(ids::sourceType);
     jassert(gainOn_ != nullptr && source_ != nullptr);
@@ -242,6 +302,32 @@ drum::DrumSettings ParameterReader::readDrum() const noexcept
     for (const auto& [raw, member] : drumBools_)
         d.*member = raw->load(std::memory_order_relaxed) >= 0.5f;
     return d;
+}
+
+} // namespace mixcore::plugin
+
+namespace mixcore::plugin {
+
+eq::EqSettings ParameterReader::readEq() const noexcept
+{
+    eq::EqSettings e;
+    e.enabled = eqOn_->load(std::memory_order_relaxed) >= 0.5f;
+    e.outputDb = eqOut_->load(std::memory_order_relaxed);
+    for (int b = 0; b < eq::kNumBands; ++b)
+    {
+        const auto& r = eqBands_[static_cast<size_t>(b)];
+        auto& band = e.bands[static_cast<size_t>(b)];
+        band.on = r.on->load(std::memory_order_relaxed) >= 0.5f;
+        band.freqHz = r.freq->load(std::memory_order_relaxed);
+        band.gainDb = r.gain != nullptr ? r.gain->load(std::memory_order_relaxed) : 0.0f;
+        band.q = r.q->load(std::memory_order_relaxed);
+        if (r.slope != nullptr)
+        {
+            const int idx = static_cast<int>(r.slope->load(std::memory_order_relaxed) + 0.5f);
+            band.slope = idx <= 0 ? 12.0f : (idx == 1 ? 24.0f : 48.0f);
+        }
+    }
+    return e;
 }
 
 } // namespace mixcore::plugin

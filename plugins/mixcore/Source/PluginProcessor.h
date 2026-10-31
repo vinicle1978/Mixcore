@@ -3,6 +3,7 @@
 #include "Parameters.h"
 #include "PresetManager.h"
 
+#include "mixcore/eq/EqCoach.h"
 #include "mixcore/strip/ChannelStrip.h"
 
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -55,6 +56,25 @@ public:
     bool readGateTelemetry(gate::GateTelemetry& out) noexcept { return strip_.gate().readTelemetry(out); }
     bool readDebleedTelemetry(drum::DeBleedTelemetry& out) noexcept { return strip_.debleed().readTelemetry(out); }
     bool readReplaceTelemetry(drum::ReplaceTelemetry& out) noexcept { return strip_.replacer().readTelemetry(out); }
+    bool readEqTelemetry(eq::EqTelemetry& out) noexcept { return strip_.eq().readTelemetry(out); }
+
+    // ---- EQ (message thread) ----
+    const eq::SpectrumTap& eqInputTap() const noexcept { return strip_.eq().inputTap(); }
+    const eq::SpectrumTap& eqOutputTap() const noexcept { return strip_.eq().outputTap(); }
+    double eqSampleRate() const noexcept { return strip_.eq().sampleRate(); }
+    /// Loads an EQ profile (EQ settings only) and switches the EQ on.
+    bool loadEqProfile(const juce::String& name);
+    /// Listen & suggest: analyses the signal going into the EQ.
+    void startEqListen(double seconds);
+    void cancelEqListen() noexcept { eqListener_.cancel(); }
+    bool eqListening() const noexcept { return eqListener_.listening(); }
+    bool eqListenReady() const noexcept { return eqListener_.ready(); }
+    float eqListenProgress() const noexcept { return eqListener_.progress(); }
+    std::vector<eq::EqSuggestion> eqSuggestions() const;
+    /// Sets one band to the suggestion (undoable host parameter changes) and switches the EQ on.
+    void applyEqSuggestion(const eq::EqSuggestion& s);
+    /// Feeds the listener from the analyzer tap (called by the timer; public for tests).
+    void pumpEqListener();
 
     // Smart Gain calibration
     void startCalibration(double activeSeconds) noexcept { strip_.gain().calibrator().requestStart(activeSeconds); }
@@ -113,6 +133,8 @@ private:
     void applySettingsToParameters(const strip::ChannelSettings& preset);
     void applyGateToParameters(const gate::GateSettings& g);
     void applyDrumToParameters(const drum::DrumSettings& d);
+    void applyEqToParameters(const eq::EqSettings& e);
+    void setEqBandParameters(int band, const eq::EqBand& b);
     void publishKit(std::unique_ptr<drum::SampleKit> kit, const juce::String& source);
     void setCurrentPreset(const juce::String& name, bool isUser, const strip::ChannelSettings& settings);
     void restorePresetReference();
@@ -124,6 +146,9 @@ private:
     strip::ChannelStrip strip_;
     PresetManager presets_;
     juce::AudioFormatManager formats_;
+    eq::EqListener eqListener_;
+    std::uint64_t eqFed_ = 0;
+    std::vector<float> eqFrame_;
     strip::ChannelSettings currentPresetSettings_ {};
 };
 

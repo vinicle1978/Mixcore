@@ -24,6 +24,7 @@ add_subdirectory(engine)
 add_subdirectory(modules/gain)
 add_subdirectory(modules/gate)
 add_subdirectory(modules/drum)
+add_subdirectory(modules/eq)
 add_subdirectory(modules/strip)
 
 # --- JUCE plugin / standalone ---------------------------------------------------

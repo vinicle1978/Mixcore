@@ -2,6 +2,7 @@
 
 #include "PluginProcessor.h"
 #include "ui/DrumPanel.h"
+#include "ui/EqPanel.h"
 #include "ui/GatePanel.h"
 #include "ui/ModuleUi.h"
 #include "ui/ReplacePanel.h"
@@ -34,7 +35,7 @@ public:
     /// Rebuild the preset menu (factory + user presets from disk).
     void rebuildPresetMenu();
 
-    enum class Page { SmartGain, Gate, Drums };
+    enum class Page { SmartGain, Gate, Drums, Eq };
     void setPage(Page page);
     /// Drums page: show the Replace view (true) or the De-bleed view (false).
     void setDrumView(bool replace);
@@ -44,6 +45,8 @@ public:
             setPage(Page::Gate);
         else if (e.eventComponent == &debleedChip_)
             setPage(Page::Drums);
+        else if (e.eventComponent == &eqChip_)
+            setPage(Page::Eq);
     }
 
 private:
@@ -89,19 +92,21 @@ private:
     juce::Label inputReadout_, outputReadout_;
     GainHistory history_;
     juce::Label activityLabel_;
-    juce::Label staticChip_, riderChip_, guardChip_, debleedChip_, gateChip_;
+    juce::Label staticChip_, riderChip_, guardChip_, debleedChip_, gateChip_, eqChip_;
     juce::TextButton gainTab_ { "Smart Gain" };
     juce::TextButton gateTab_ { "Gate" };
     juce::TextButton drumTab_ { "Drums" };
+    juce::TextButton eqTab_ { "EQ" };
     PowerButton gainPower_ { "Smart Gain" };
     PowerButton gatePower_ { "Gate" };
     PowerButton drumPower_ { "Drums" };
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> gainPowerAtt_, gatePowerAtt_, drumPowerAtt_;
+    PowerButton eqPower_ { "EQ" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> gainPowerAtt_, gatePowerAtt_, drumPowerAtt_, eqPowerAtt_;
     ModuleOffBanner offBanner_;
     juce::ComboBox sourceBox_;
     juce::Label sourceLabel_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> sourceAttachment_;
-    bool gainOn_ = true, gateOn_ = false, drumOn_ = false;
+    bool gainOn_ = true, gateOn_ = false, drumOn_ = false, eqOn_ = false;
     int lastModuleKey_ = -1;
     gain::SourceType lastSource_ = static_cast<gain::SourceType>(-1); // forces the first update
     Page page_ = Page::SmartGain;
@@ -118,6 +123,8 @@ private:
     juce::TextEditor drumInfoText_;
     drum::DeBleedTelemetry drumTelemetry_;
     juce::String lastDrumInfo_;
+    EqPanel eqPanel_ { processor_ };
+    EqSuggestPanel eqSuggestPanel_ { processor_ };
 
     // Main controls
     Knob target_, staticGain_, strength_;

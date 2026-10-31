@@ -4,6 +4,7 @@
 
 #include "mixcore/drum/DrumProfiles.h"
 #include "mixcore/drum/StarterKits.h"
+#include "mixcore/eq/EqProfiles.h"
 #include "mixcore/gate/GateProfiles.h"
 #include "mixcore/strip/ChannelPresets.h"
 
@@ -29,8 +30,9 @@ MixCoreProcessor::MixCoreProcessor()
 {
     formats_.registerBasicFormats(); // WAV, AIFF (+ FLAC/Ogg where available)
     const auto& first = strip::channelPresets().front();
+    applySettingsToParameters(first.settings); // e.g. its EQ starting curve (EQ itself off)
     setCurrentPreset(first.name, false, first.settings);
-    startTimerHz(20);
+    startTimerHz(30);
 }
 
 MixCoreProcessor::~MixCoreProcessor() { stopTimer(); }
@@ -69,6 +71,7 @@ void MixCoreProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Midi
 void MixCoreProcessor::timerCallback()
 {
     strip_.replacer().kits().collectGarbage(); // frees kits the audio thread has finished with
+    pumpEqListener();
     const int latency = strip_.latencySamples();
     if (latency != getLatencySamples())
         setLatencySamples(latency);
@@ -188,6 +191,7 @@ void MixCoreProcessor::applySettingsToParameters(const strip::ChannelSettings& p
             setParam(spec.id, target.gain.*spec.member ? 1.0f : 0.0f);
     applyGateToParameters(target.gate);
     applyDrumToParameters(target.drum);
+    applyEqToParameters(target.eq);
     setParam(ids::smartGainOn, target.gainOn ? 1.0f : 0.0f);
     setParam(ids::sourceType, static_cast<float>(static_cast<int>(target.source)));
 }
@@ -308,6 +312,71 @@ void MixCoreProcessor::setStateInformation(const void* data, int sizeInBytes)
     restorePresetReference();
     // Parameters missing from older sessions keep their defaults; the engine
     // re-validates every value before use.
+}
+
+// --------------------------------------------------------------- EQ
+
+void MixCoreProcessor::setEqBandParameters(int band, const eq::EqBand& b)
+{
+    setParam(eqParamId(band, EqField::On).toRawUTF8(), b.on ? 1.0f : 0.0f);
+    setParam(eqParamId(band, EqField::Freq).toRawUTF8(), b.freqHz);
+    if (eqBandHasGain(band))
+        setParam(eqParamId(band, EqField::Gain).toRawUTF8(), b.gainDb);
+    setParam(eqParamId(band, EqField::Q).toRawUTF8(), b.q);
+    if (eqBandHasSlope(band))
+        setParam(eqParamId(band, EqField::Slope).toRawUTF8(), b.slope < 18.0f ? 0.0f : (b.slope < 36.0f ? 1.0f : 2.0f));
+}
+
+void MixCoreProcessor::applyEqToParameters(const eq::EqSettings& e)
+{
+    setParam(ids::eqOn, e.enabled ? 1.0f : 0.0f);
+    setParam(ids::eqOutput, e.outputDb);
+    for (int b = 0; b < eq::kNumBands; ++b)
+        setEqBandParameters(b, e.bands[static_cast<size_t>(b)]);
+}
+
+bool MixCoreProcessor::loadEqProfile(const juce::String& name)
+{
+    const auto* p = eq::findEqProfile(name.toStdString());
+    if (p == nullptr)
+        return false;
+    applyEqToParameters(p->settings); // profile settings have enabled == true
+    return true;
+}
+
+void MixCoreProcessor::startEqListen(double seconds)
+{
+    eqListener_.start(seconds, eqSampleRate());
+    eqFed_ = eqInputTap().written();
+}
+
+void MixCoreProcessor::pumpEqListener()
+{
+    if (!eqListener_.listening())
+        return;
+    const int frame = eq::EqListener::frameSize();
+    const auto hop = static_cast<std::uint64_t>(frame / 2);
+    const auto written = eqInputTap().written();
+    if (written < eqFed_ + hop || written < static_cast<std::uint64_t>(frame))
+        return;
+    eqFrame_.resize(static_cast<size_t>(frame));
+    eqInputTap().readLatest(eqFrame_.data(), frame);
+    eqListener_.feedFrame(eqFrame_.data());
+    eqFed_ = written;
+}
+
+std::vector<eq::EqSuggestion> MixCoreProcessor::eqSuggestions() const
+{
+    const auto c = reader_.readChannel();
+    return eqListener_.suggestions(c.source, c.eq);
+}
+
+void MixCoreProcessor::applyEqSuggestion(const eq::EqSuggestion& s)
+{
+    if (s.band < 0 || s.band >= eq::kNumBands)
+        return;
+    setEqBandParameters(s.band, s.settings);
+    setParam(ids::eqOn, 1.0f);
 }
 
 // ------------------------------------------------------------- Kits

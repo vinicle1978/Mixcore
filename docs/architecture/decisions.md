@@ -213,6 +213,24 @@ deliberate use of red outside warnings and safety.
 **Why:** user: Mix is the most important replacement control and should draw
 the eye. Red elsewhere still means "look here" (clipping, guard, reduction).
 
+## ADR-029 — EQ position: last in the strip, zero latency
+**Decision:** the parametric EQ runs after drum replacement (Gain → De-bleed →
+Gate → Replace → EQ). Minimum-phase biquads only (no linear phase), 0 latency.
+**Why:** the EQ then shapes what the listener hears — including replacement
+samples — and doesn't change what the gate or replacement detectors respond
+to (those have their own key filters). Zero latency keeps it safe for live
+monitoring. Channel presets carry an EQ profile but leave the EQ off.
+
+## ADR-030 — EQ Coach suggests; the user applies
+**Decision:** "Listen & suggest" measures the long-term 1/3-octave spectrum on
+the message thread with fixed, documented rules (no ML) and returns at most 5
+suggestions, each tied to one band with a plain-language reason. Nothing
+changes until the user presses Apply; Apply writes host parameters (undo,
+automation) and switches the EQ on.
+**Why:** spec rule — recommendations are never applied silently; the user stays
+in charge of tone. Rules judge each region against its neighbours and a
+source-specific reference, so level and overall tilt never trigger advice.
+
 ## Open decisions (need product input)
 * Plugin code `Mxcr` and the Windows installer AppId are kept; confirm they are
   final before the first public release.

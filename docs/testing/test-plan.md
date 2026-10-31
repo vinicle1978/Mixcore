@@ -13,15 +13,18 @@ Timing-sensitive suites (`realtime`, `performance`) are marked `RUN_SERIAL`.
 
 ## Latest recorded run
 
-* **Date:** 2026-10-29 · **Commit:** see `git log` · **Machine:** Linux x86_64 dev
+* **Date:** 2026-10-31 · **Commit:** see `git log` · **Machine:** Linux x86_64 dev
   container, 2 vCPU Intel Xeon @ 2.10 GHz, GCC 13.3, JUCE 8.0.4, Catch2 3.7.1.
-* **Result: 122 / 122 CTest tests passed** (after the Mix control; 121 / 121 after drum replacement; 101 / 101 after module power + source type; 93 / 93 after the VineAudio rebrand; 90 / 90 after drum de-bleed; 74 / 74 after the gate, 48 / 48 with presets, 37 / 37 before) (three consecutive parallel runs), and
+* **Result: 140 / 140 CTest tests passed** (after the parametric EQ; 122 / 122 after the Mix control; 121 / 121 after drum replacement; 101 / 101 after module power + source type; 93 / 93 after the VineAudio rebrand; 90 / 90 after drum de-bleed; 74 / 74 after the gate, 48 / 48 with presets, 37 / 37 before) (three consecutive parallel runs), and
   again from a **fresh clone configured exactly like the Linux CI job**
   (JUCE/Catch2 fetched from GitHub, engine `-Werror`).
 * Engine + tests also built with **Clang 18 / libc++ with `-Werror`**: all
-  engine tests pass.
-* **AddressSanitizer + UBSan:** unit suite clean. **ThreadSanitizer:** thread
-  test clean.
+  103 engine tests pass; Clang plugin build: 140 / 140.
+* **AddressSanitizer + UBSan:** 103 / 103 clean. **ThreadSanitizer:** all
+  realtime/thread tests clean (the 10-minute performance test is too slow
+  under TSan's instrumentation and is only meaningful in Release).
+* Timing note: the realtime block-time test fails if another build is using
+  the CPU at the same time; run it on an idle machine (it passed 3/3 alone).
 * **Not run here:** macOS and Windows builds (no runners in this environment —
   see `.github/workflows/ci.yml`), AU validation (`auval`), VST3 validator
   (`pluginval`), real DAWs, real audio interfaces, listening tests.
@@ -149,6 +152,22 @@ listening tests are required.
 | Strip | detector hears pre-gate (closed gate still triggers); latency = gate + replacement; aligned | pass |
 | Realtime | strip no-allocation test toggles module/replacement, Live/Studio lookahead, pitch, length with a kit loaded | pass |
 | Plugin | params (Off/Full display, lookahead not automatable); presets load starter kits, replacement off; 0 → 72 samples latency; end-to-end playback; folder → 3 layers/4 samples; session restore; missing files named; user preset keeps kit; old sessions keep drum module on; Replace view renders | pass |
+
+## EQ tests
+
+| Requirement | Test | Result |
+|---|---|---|
+| Settings | defaults, validation (shelf Q ≤ 2, slope snaps to 12/24/48), serialise round-trip | pass |
+| Bells / shelves | measured gain at the centre/plateau matches the setting | pass |
+| HP / LP | −3 dB at the corner; slope at 2 octaves matches the exact Butterworth value for 12/24/48 dB (found and fixed in the test: at 3 octaves the 48 dB case reached the float noise floor) | pass |
+| Drawn curve | `responseDb` (what the UI draws) matches the measured response | pass |
+| Off / flat | EQ off bit-exact, 0 latency; flat EQ transparent | pass |
+| No clicks | sweeping a band and switching it on/off: no step larger than the signal allows | pass |
+| Block size / extremes | 64 vs 997 identical; stable at 20 Hz / 20 kHz, Q 0.1 / 10, ±18 dB | pass |
+| Analyzer | FFT of a sine peaks in the right bin; 1/3-octave levels | pass |
+| Coach | resonance found at 2 kHz with a bounded narrow cut, wording follows the source type; mud on a vocal-shaped signal; rumble → high-pass; nothing invented on clean pink noise; silence ignored (found and fixed: straight-line spectral fits tilted toward the bump and missed mud — now source reference curves + neighbour-relative rules) | pass |
+| Realtime | strip no-allocation test toggles the EQ and moves bands | pass |
+| Plugin | params and defaults; +9 dB bell measured through `processBlock` with unchanged latency; band off = unity; profiles; Listen & suggest changes nothing until Apply, Apply sets the band and switches the EQ on; user preset v5 round-trip, v4 loads with EQ off; EQ page renders on and off | pass |
 
 ## Plugin adapter tests
 

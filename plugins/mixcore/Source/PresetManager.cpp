@@ -5,7 +5,7 @@ namespace mixcore::plugin {
 namespace {
 constexpr const char* kRootTag = "MixCorePreset";
 constexpr const char* kModule = "SmartGain";
-constexpr int kFormatVersion = 4;
+constexpr int kFormatVersion = 5; // v5: <Eq>
 } // namespace
 
 PresetManager::PresetManager() : PresetManager(defaultDirectory())
@@ -87,6 +87,10 @@ std::optional<UserPreset> PresetManager::read(const juce::File& file)
         p.settings.drum = drum::DrumSettings::deserialise(d->getAllSubText().trim().toStdString());
     else
         p.settings.drum = drum::DrumSettings {}; // v1/v2 file: de-bleed off
+    if (const auto* e = xml->getChildByName("Eq"))
+        p.settings.eq = eq::EqSettings::deserialise(e->getAllSubText().trim().toStdString());
+    else
+        p.settings.eq = eq::EqSettings {}; // v1-v4 file: EQ off, flat
     return p; // deserialise() already validated every value
 }
 
@@ -134,6 +138,8 @@ juce::String PresetManager::save(const juce::String& name, const strip::ChannelS
     g->addTextElement(juce::String(settings.gate.serialise()));
     auto* d = root.createNewChildElement("Drum");
     d->addTextElement(juce::String(settings.drum.serialise()));
+    auto* e = root.createNewChildElement("Eq");
+    e->addTextElement(juce::String(settings.eq.serialise()));
 
     // Write to a temporary file then move it into place, so a crash never
     // leaves a half-written preset.

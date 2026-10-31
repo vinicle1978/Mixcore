@@ -149,6 +149,15 @@ Open **Drums → Replace**.
 Sessions and your presets remember the kit. If sample files were moved,
 MixCore tells you which ones it could not find.
 
+## EQ
+
+Every channel preset prepares a matching EQ curve (Lead Vocal, Backing Vocal,
+Speech, Kick, Snare, Toms, Instrument) **with the EQ switched off**, so loading a
+preset never changes the sound of the EQ. Switch the EQ on to hear it. On the EQ
+page, **Load EQ profile...** loads a curve and switches the EQ on. User presets
+(format v5) save the whole EQ; presets saved before the EQ existed load with it
+off and flat.
+
 ## Your own presets
 
 1. Set things up the way you like.

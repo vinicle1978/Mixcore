@@ -2,6 +2,7 @@
 
 #include "mixcore/gain/SmartGainPresets.h"
 #include "mixcore/drum/DrumProfiles.h"
+#include "mixcore/eq/EqProfiles.h"
 #include "mixcore/gate/GateProfiles.h"
 
 #include <cmath>
@@ -79,6 +80,22 @@ std::vector<ChannelPreset> build()
         for (const auto& [gainName, kitId] : kKitFor)
             if (g.name == gainName)
                 p.kit = kitId;
+        // EQ starting curve for this source (the EQ itself stays off until you switch it on).
+        {
+            const char* eqName = g.category == "Backing Vocal" ? "Backing Vocal"
+                                 : g.category == "Lead Vocal"  ? "Lead Vocal"
+                                 : g.category == "Speech"      ? "Speech"
+                                 : g.name == "Kick Drum"       ? "Kick"
+                                 : g.name == "Snare Drum"      ? "Snare"
+                                 : g.name == "Toms"            ? "Toms"
+                                                               : "Flat";
+            if (const auto* e = eq::findEqProfile(eqName))
+            {
+                p.settings.eq = e->settings;
+                p.settings.eq.enabled = false;
+                p.eqProfile = e->name;
+            }
+        }
         // Replacement detector tuned per drum (replacement itself stays off).
         if (g.name == "Kick Drum")
         {
@@ -132,6 +149,7 @@ ChannelSettings applyChannelPreset(const ChannelSettings& current, const Channel
     s.source = preset.source;
     s.gate = preset.gate;
     s.drum = preset.drum;
+    s.eq = preset.eq;
     s.validate();
     return s;
 }
@@ -141,7 +159,8 @@ bool matchesChannelPreset(const ChannelSettings& current, const ChannelSettings&
     return current.gainOn == preset.gainOn && current.source == preset.source
            && gain::matchesPreset(current.gain, preset.gain, tolerance)
            && gate::gateSettingsMatch(current.gate, preset.gate, tolerance)
-           && drumSettingsMatch(current.drum, preset.drum, tolerance);
+           && drumSettingsMatch(current.drum, preset.drum, tolerance)
+           && eq::approximatelyEqual(current.eq, preset.eq, tolerance);
 }
 
 std::string serialiseGate(const ChannelSettings& s) { return s.gate.serialise(); }

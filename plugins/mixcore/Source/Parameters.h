@@ -9,6 +9,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include <array>
 #include <atomic>
 #include <vector>
 
@@ -56,6 +57,8 @@ inline constexpr const char* gateLookahead = "gateLookahead";
 inline constexpr const char* smartGainOn = "smartGainOn";
 inline constexpr const char* sourceType = "sourceType";
 
+inline constexpr const char* eqOn = "eqOn";
+inline constexpr const char* eqOutput = "eqOutput";
 inline constexpr const char* drumOn = "drumOn";
 inline constexpr const char* drumDebleed = "drumDebleed";
 inline constexpr const char* drumReplace = "drumReplace";
@@ -117,6 +120,20 @@ const std::vector<GateBoolParamSpec>& gateBoolParamSpecs();
 const std::vector<DrumFloatParamSpec>& drumFloatParamSpecs();
 const std::vector<DrumBoolParamSpec>& drumBoolParamSpecs();
 
+/// EQ band parameter ids: "eqB<band>On", "eqB<band>Freq", "eqB<band>Gain",
+/// "eqB<band>Q", "eqB<band>Slope" (slope: high-/low-pass bands only).
+enum class EqField
+{
+    On,
+    Freq,
+    Gain,
+    Q,
+    Slope
+};
+juce::String eqParamId(int band, EqField field);
+bool eqBandHasGain(int band);
+bool eqBandHasSlope(int band);
+
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
 /// Reads all parameters into a settings struct. Construct on the message
@@ -136,14 +153,27 @@ public:
         c.gain = read();
         c.gate = readGate();
         c.drum = readDrum();
+        c.eq = readEq();
         return c;
     }
+    eq::EqSettings readEq() const noexcept;
 
 private:
     std::vector<std::pair<std::atomic<float>*, float gain::SmartGainSettings::*>> floats_;
     std::vector<std::pair<std::atomic<float>*, bool gain::SmartGainSettings::*>> bools_;
     std::vector<std::pair<std::atomic<float>*, float gate::GateSettings::*>> gateFloats_;
     std::vector<std::pair<std::atomic<float>*, bool gate::GateSettings::*>> gateBools_;
+    struct EqBandRaw
+    {
+        std::atomic<float>* on = nullptr;
+        std::atomic<float>* freq = nullptr;
+        std::atomic<float>* gain = nullptr;
+        std::atomic<float>* q = nullptr;
+        std::atomic<float>* slope = nullptr; // choice index 0/1/2 = 12/24/48 dB/oct
+    };
+    std::array<EqBandRaw, eq::kNumBands> eqBands_ {};
+    std::atomic<float>* eqOn_ = nullptr;
+    std::atomic<float>* eqOut_ = nullptr;
     std::atomic<float>* gainOn_ = nullptr;
     std::atomic<float>* source_ = nullptr;
     std::vector<std::pair<std::atomic<float>*, float drum::DrumSettings::*>> drumFloats_;

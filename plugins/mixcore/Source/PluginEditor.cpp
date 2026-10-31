@@ -127,12 +127,18 @@ MixCoreEditor::MixCoreEditor(MixCoreProcessor& p) : AudioProcessorEditor(&p), pr
     debleedChip_.setTooltip("Drums: de-bleed reduction, or HIT when replacement triggers a sample. Click to open the Drums page.");
     styleChip(gateChip_, theme::good);
     gateChip_.setTooltip("Gate: gain reduction applied after Smart Gain. Click to open the Gate page.");
-    for (auto* c : { &staticChip_, &riderChip_, &guardChip_, &debleedChip_, &gateChip_ })
+    styleChip(eqChip_, theme::ice);
+    eqChip_.setTooltip("EQ: number of active bands. Click to open the EQ page.");
+    eqChip_.addMouseListener(this, false);
+    for (auto* c : { &staticChip_, &riderChip_, &guardChip_, &debleedChip_, &gateChip_, &eqChip_ })
+    {
+        c->setFont(theme::font(13.5f, true));
         addAndMakeVisible(*c);
+    }
     addAndMakeVisible(history_);
 
     // Module pages
-    for (auto* tab : { &gainTab_, &gateTab_, &drumTab_ })
+    for (auto* tab : { &gainTab_, &gateTab_, &drumTab_, &eqTab_ })
     {
         tab->setClickingTogglesState(true);
         tab->setRadioGroupId(4711);
@@ -146,6 +152,10 @@ MixCoreEditor::MixCoreEditor(MixCoreProcessor& p) : AudioProcessorEditor(&p), pr
     gateTab_.onClick = [this] { if (gateTab_.getToggleState()) setPage(Page::Gate); };
     drumTab_.setTooltip("Drums: de-bleed (reduces cymbal and hi-hat bleed in drum mics, also while the gate is open).");
     drumTab_.onClick = [this] { if (drumTab_.getToggleState()) setPage(Page::Drums); };
+    eqTab_.setTooltip("EQ: 7-band parametric EQ with analyzer, profiles and Listen & suggest (zero latency).");
+    eqTab_.onClick = [this] { if (eqTab_.getToggleState()) setPage(Page::Eq); };
+    addChildComponent(eqPanel_);
+    addChildComponent(eqSuggestPanel_);
     debleedChip_.addMouseListener(this, false);
     addChildComponent(drumPanel_);
     addChildComponent(replacePanel_);
@@ -168,10 +178,15 @@ MixCoreEditor::MixCoreEditor(MixCoreProcessor& p) : AudioProcessorEditor(&p), pr
     gainPowerAtt_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(apvts, ids::smartGainOn, gainPower_);
     gatePowerAtt_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(apvts, ids::gateEnabled, gatePower_);
     drumPowerAtt_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(apvts, ids::drumOn, drumPower_);
-    for (auto* b : { &gainPower_, &gatePower_, &drumPower_ })
+    eqPowerAtt_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(apvts, ids::eqOn, eqPower_);
+    for (auto* b : { &gainPower_, &gatePower_, &drumPower_, &eqPower_ })
         addAndMakeVisible(*b);
     offBanner_.onTurnOn = [this] {
-        setParameter(page_ == Page::SmartGain ? ids::smartGainOn : page_ == Page::Gate ? ids::gateEnabled : ids::drumDebleed, 1.0f);
+        setParameter(page_ == Page::SmartGain ? ids::smartGainOn
+                     : page_ == Page::Gate    ? ids::gateEnabled
+                     : page_ == Page::Drums   ? ids::drumOn
+                                              : ids::eqOn,
+                     1.0f);
     };
     addChildComponent(offBanner_);
 
@@ -304,6 +319,10 @@ void MixCoreEditor::setPage(Page page)
     const bool gainPage = page == Page::SmartGain;
     const bool gatePage = page == Page::Gate;
     const bool drumPage = page == Page::Drums;
+    const bool eqPage = page == Page::Eq;
+    eqTab_.setToggleState(eqPage, juce::dontSendNotification);
+    eqPanel_.setVisible(eqPage);
+    eqSuggestPanel_.setVisible(eqPage);
     gainTab_.setToggleState(gainPage, juce::dontSendNotification);
     gateTab_.setToggleState(gatePage, juce::dontSendNotification);
     drumTab_.setToggleState(drumPage, juce::dontSendNotification);
@@ -408,21 +427,22 @@ void MixCoreEditor::paint(juce::Graphics& g)
     };
     chipLabel("STATIC", staticChip_, gainOn_);
     chipLabel("RIDER", riderChip_, gainOn_);
-    chipLabel("PEAK GUARD", guardChip_, gainOn_);
+    chipLabel("GUARD", guardChip_, gainOn_);
     chipLabel("DRUMS", debleedChip_, drumOn_);
     chipLabel("GATE", gateChip_, gateOn_);
+    chipLabel("EQ", eqChip_, eqOn_);
     g.setColour(theme::label);
-    g.drawText(page_ == Page::Gate ? "GATE THRESHOLD" : page_ == Page::Drums ? (replaceViewShown_ ? "REPLACE" : "DE-BLEED") : "CALIBRATION", juce::Rectangle<int>(getWidth() - 340, 66, 200, 16),
+    g.drawText(page_ == Page::Gate ? "GATE THRESHOLD" : page_ == Page::Drums ? (replaceViewShown_ ? "REPLACE" : "DE-BLEED") : page_ == Page::Eq ? "EQ COACH" : "CALIBRATION", juce::Rectangle<int>(getWidth() - 340, 66, 200, 16),
                juce::Justification::centredLeft);
     g.drawText("MIX COACH", coachText_.getBounds().translated(0, -20).withHeight(16), juce::Justification::centredLeft);
 
     // Signal-flow arrows between the chips.
     g.setColour(theme::muted);
-    for (auto* c : { &staticChip_, &riderChip_, &guardChip_, &debleedChip_ })
+    for (auto* c : { &staticChip_, &riderChip_, &guardChip_, &debleedChip_, &gateChip_ })
     {
         const auto r = c->getBounds();
-        g.drawArrow(juce::Line<float>(static_cast<float>(r.getRight() + 4), static_cast<float>(r.getCentreY()),
-                                      static_cast<float>(r.getRight() + 14), static_cast<float>(r.getCentreY())),
+        g.drawArrow(juce::Line<float>(static_cast<float>(r.getRight() + 2), static_cast<float>(r.getCentreY()),
+                                      static_cast<float>(r.getRight() + 10), static_cast<float>(r.getCentreY())),
                     1.5f, 6.0f, 6.0f);
     }
 }
@@ -459,7 +479,8 @@ void MixCoreEditor::resized()
     // Right: calibration + coach
     auto right = area.removeFromRight(340).reduced(12, 8);
     right.removeFromTop(22);
-    auto cal = right.removeFromTop(220);
+    auto cal = right.removeFromTop(page_ == Page::Eq ? 330 : 220);
+    eqSuggestPanel_.setBounds(cal);
     gateLearnPanel_.setBounds(cal);
     drumInfoText_.setBounds(cal);
     calibrateButton_.setBounds(cal.removeFromTop(30));
@@ -491,22 +512,29 @@ void MixCoreEditor::resized()
     drumPower_.setBounds(tabs.removeFromLeft(26));
     tabs.removeFromLeft(2);
     drumTab_.setBounds(tabs.removeFromLeft(74));
+    tabs.removeFromLeft(8);
+    eqPower_.setBounds(tabs.removeFromLeft(26));
+    tabs.removeFromLeft(2);
+    eqTab_.setBounds(tabs.removeFromLeft(56));
     centre.removeFromTop(4);
     activityLabel_.setBounds(centre.removeFromTop(20));
     centre.removeFromTop(16);
     auto chips = centre.removeFromTop(36);
-    constexpr int gap = 18;
-    const int chipW = (chips.getWidth() - 4 * gap) / 5;
-    for (auto* chip : { &staticChip_, &riderChip_, &guardChip_, &debleedChip_ })
+    constexpr int gap = 12;
+    const int chipW = (chips.getWidth() - 5 * gap) / 6;
+    for (auto* chip : { &staticChip_, &riderChip_, &guardChip_, &debleedChip_, &gateChip_ })
     {
         chip->setBounds(chips.removeFromLeft(chipW));
         chips.removeFromLeft(gap);
     }
-    gateChip_.setBounds(chips);
+    eqChip_.setBounds(chips);
     centre.removeFromTop(10);
 
     gatePanel_.setBounds(centre);
+    eqPanel_.setBounds(centre);
     offBanner_.setBounds(centre.withHeight(54));
+    if (page_ == Page::Eq)
+        offBanner_.setBounds(centre.withTrimmedTop(34).withHeight(54)); // below the profile / EQ ON row
     {
         auto drums = centre;
         auto seg = drums.removeFromTop(26);
@@ -596,8 +624,9 @@ void MixCoreEditor::updateModuleStates(bool force)
     gainOn_ = c.gainOn;
     gateOn_ = c.gate.enabled;
     drumOn_ = c.drum.moduleOn;
-    const int key = (gainOn_ ? 1 : 0) | (gateOn_ ? 2 : 0) | (drumOn_ ? 4 : 0) | (static_cast<int>(page_) << 3)
-                    | (advanced_ ? 64 : 0);
+    eqOn_ = c.eq.enabled;
+    const int key = (gainOn_ ? 1 : 0) | (gateOn_ ? 2 : 0) | (drumOn_ ? 4 : 0) | (eqOn_ ? 8 : 0) | (static_cast<int>(page_) << 4)
+                    | (advanced_ ? 256 : 0);
     if (!force && key == lastModuleKey_)
         return;
     lastModuleKey_ = key;
@@ -621,14 +650,16 @@ void MixCoreEditor::updateModuleStates(bool force)
     gatePanel_.setAlpha(gateOn_ ? 1.0f : dim);
     drumPanel_.setAlpha(drumOn_ ? 1.0f : dim);
     replacePanel_.setAlpha(drumOn_ ? 1.0f : dim);
+    eqPanel_.setAlpha(eqOn_ ? 1.0f : 0.6f); // lighter dim: the curve stays readable for setting up
+    eqTab_.setColour(juce::TextButton::textColourOffId, eqOn_ ? theme::text : theme::muted.withAlpha(0.6f));
 
     gainTab_.setColour(juce::TextButton::textColourOffId, gainOn_ ? theme::text : theme::muted.withAlpha(0.6f));
     gateTab_.setColour(juce::TextButton::textColourOffId, gateOn_ ? theme::text : theme::muted.withAlpha(0.6f));
     drumTab_.setColour(juce::TextButton::textColourOffId, drumOn_ ? theme::text : theme::muted.withAlpha(0.6f));
 
     const bool pageOff = (page_ == Page::SmartGain && !gainOn_) || (page_ == Page::Gate && !gateOn_)
-                         || (page_ == Page::Drums && !drumOn_);
-    offBanner_.setModule(page_ == Page::SmartGain ? "Smart Gain" : page_ == Page::Gate ? "Gate" : "Drums");
+                         || (page_ == Page::Drums && !drumOn_) || (page_ == Page::Eq && !eqOn_);
+    offBanner_.setModule(page_ == Page::SmartGain ? "Smart Gain" : page_ == Page::Gate ? "Gate" : page_ == Page::Drums ? "Drums" : "EQ");
     offBanner_.setVisible(pageOff);
     if (pageOff)
         offBanner_.toFront(false);
@@ -681,6 +712,11 @@ void MixCoreEditor::refresh()
     }
     if (page_ == Page::Gate)
         gateLearnPanel_.update(gt.learnProgress);
+    if (page_ == Page::Eq)
+    {
+        eqPanel_.update();
+        eqSuggestPanel_.update();
+    }
 
     if (!gt.enabled)
     {
@@ -733,6 +769,13 @@ void MixCoreEditor::refresh()
         setChipOff(*c, !gainOn_, c == &guardChip_ ? theme::safety : c == &staticChip_ ? theme::level : theme::rider);
     setChipOff(gateChip_, !gt.enabled, theme::good);
     setChipOff(debleedChip_, !drumOn_, theme::blueLight);
+    if (eqOn_)
+    {
+        const int bands = processor_.currentChannelSettings().eq.activeBandCount();
+        eqChip_.setText(juce::String(bands) + (bands == 1 ? " band" : " bands"), juce::dontSendNotification);
+        eqChip_.setColour(juce::Label::textColourId, theme::ice);
+    }
+    setChipOff(eqChip_, !eqOn_, theme::ice);
 
     if (page_ == Page::SmartGain)
         updateCalibrationUi();

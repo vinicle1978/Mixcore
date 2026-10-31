@@ -31,6 +31,7 @@ public:
     }
     /// Uniform in [-1, 1).
     float bipolar() noexcept { return static_cast<float>((next() >> 11) * (1.0 / 9007199254740992.0) * 2.0 - 1.0); }
+    float uniform() noexcept { return 0.5f * (bipolar() + 1.0f); }
 
 private:
     std::uint64_t state_;
