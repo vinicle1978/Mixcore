@@ -158,6 +158,13 @@ page, **Load EQ profile...** loads a curve and switches the EQ on. User presets
 (format v5) save the whole EQ; presets saved before the EQ existed load with it
 off and flat.
 
+## Compressor
+
+Every channel preset prepares a matching compressor starting point **with the
+compressor switched off**. On the Comp page, **Load comp profile...** loads one
+and switches it on. User presets (format v6) save the compressor; older presets
+load with it off.
+
 ## Your own presets
 
 1. Set things up the way you like.

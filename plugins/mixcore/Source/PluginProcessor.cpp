@@ -2,6 +2,7 @@
 
 #include "PluginEditor.h"
 
+#include "mixcore/comp/CompProfiles.h"
 #include "mixcore/drum/DrumProfiles.h"
 #include "mixcore/drum/StarterKits.h"
 #include "mixcore/eq/EqProfiles.h"
@@ -72,6 +73,7 @@ void MixCoreProcessor::timerCallback()
 {
     strip_.replacer().kits().collectGarbage(); // frees kits the audio thread has finished with
     pumpEqListener();
+    pumpCompListener();
     const int latency = strip_.latencySamples();
     if (latency != getLatencySamples())
         setLatencySamples(latency);
@@ -192,6 +194,7 @@ void MixCoreProcessor::applySettingsToParameters(const strip::ChannelSettings& p
     applyGateToParameters(target.gate);
     applyDrumToParameters(target.drum);
     applyEqToParameters(target.eq);
+    applyCompToParameters(target.comp);
     setParam(ids::smartGainOn, target.gainOn ? 1.0f : 0.0f);
     setParam(ids::sourceType, static_cast<float>(static_cast<int>(target.source)));
 }
@@ -377,6 +380,64 @@ void MixCoreProcessor::applyEqSuggestion(const eq::EqSuggestion& s)
         return;
     setEqBandParameters(s.band, s.settings);
     setParam(ids::eqOn, 1.0f);
+}
+
+// --------------------------------------------------------- Compressor
+
+void MixCoreProcessor::applyCompToParameters(const comp::CompSettings& c)
+{
+    setParam(ids::compOn, c.enabled ? 1.0f : 0.0f);
+    setParam(ids::compThreshold, c.thresholdDb);
+    setParam(ids::compRatio, c.ratio);
+    setParam(ids::compKnee, c.kneeDb);
+    setParam(ids::compAttack, c.attackMs);
+    setParam(ids::compRelease, c.releaseMs);
+    setParam(ids::compAutoRelease, c.autoRelease ? 1.0f : 0.0f);
+    setParam(ids::compMakeup, c.makeupDb);
+    setParam(ids::compAutoMakeup, c.autoMakeup ? 1.0f : 0.0f);
+    setParam(ids::compMix, c.mixPercent);
+    setParam(ids::compScHpfOn, c.scHpfOn ? 1.0f : 0.0f);
+    setParam(ids::compScHpf, c.scHpfHz);
+    setParam(ids::compDetector, static_cast<float>(static_cast<int>(c.detector)));
+}
+
+bool MixCoreProcessor::loadCompProfile(const juce::String& name)
+{
+    const auto* p = comp::findCompProfile(name.toStdString());
+    if (p == nullptr)
+        return false;
+    applyCompToParameters(p->settings); // profile settings have enabled == true
+    return true;
+}
+
+void MixCoreProcessor::startCompListen(double seconds) { compListener_.start(seconds, strip_.comp().levelTap()); }
+
+void MixCoreProcessor::pumpCompListener() { compListener_.pump(strip_.comp().levelTap()); }
+
+std::vector<comp::CompSuggestion> MixCoreProcessor::compSuggestions() const
+{
+    const auto c = reader_.readChannel();
+    return compListener_.suggestions(c.source, c.comp);
+}
+
+void MixCoreProcessor::applyCompSuggestion(const comp::CompSuggestion& s)
+{
+    // Only what the suggestion changes, so applying several suggestions (in any order) combines them.
+    const auto& n = s.settings;
+    const auto& b = s.base;
+    if (n.thresholdDb != b.thresholdDb) setParam(ids::compThreshold, n.thresholdDb);
+    if (n.ratio != b.ratio) setParam(ids::compRatio, n.ratio);
+    if (n.kneeDb != b.kneeDb) setParam(ids::compKnee, n.kneeDb);
+    if (n.attackMs != b.attackMs) setParam(ids::compAttack, n.attackMs);
+    if (n.releaseMs != b.releaseMs) setParam(ids::compRelease, n.releaseMs);
+    if (n.autoRelease != b.autoRelease) setParam(ids::compAutoRelease, n.autoRelease ? 1.0f : 0.0f);
+    if (n.makeupDb != b.makeupDb) setParam(ids::compMakeup, n.makeupDb);
+    if (n.autoMakeup != b.autoMakeup) setParam(ids::compAutoMakeup, n.autoMakeup ? 1.0f : 0.0f);
+    if (n.mixPercent != b.mixPercent) setParam(ids::compMix, n.mixPercent);
+    if (n.scHpfOn != b.scHpfOn) setParam(ids::compScHpfOn, n.scHpfOn ? 1.0f : 0.0f);
+    if (n.scHpfHz != b.scHpfHz) setParam(ids::compScHpf, n.scHpfHz);
+    if (n.detector != b.detector) setParam(ids::compDetector, static_cast<float>(static_cast<int>(n.detector)));
+    setParam(ids::compOn, 1.0f);
 }
 
 // ------------------------------------------------------------- Kits

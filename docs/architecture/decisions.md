@@ -231,6 +231,22 @@ automation) and switches the EQ on.
 in charge of tone. Rules judge each region against its neighbours and a
 source-specific reference, so level and overall tilt never trigger advice.
 
+## ADR-031 — Compressor: last in the strip, zero latency, single-gain parallel mix
+**Decision:** the compressor runs after the EQ (… → EQ → Compressor). It is
+feed-forward, stereo-linked and has no lookahead (0 latency). Dry/wet mix and
+the on/off crossfade are folded into one per-sample gain.
+**Why:** EQ before compression is the common channel-strip order and lets EQ
+boosts be controlled. Zero latency keeps it live-safe; Smart Gain's optional
+peak guard covers hard ceilings. One gain means parallel compression can never
+comb-filter and "off" / "Mix 0 %" are bit-exact.
+
+## ADR-032 — Comp Coach suggestions apply only what they change
+**Decision:** each suggestion stores the settings it was computed from; Apply
+writes only the values that differ (undoable host parameters) and switches the
+compressor on. Nothing is applied without the user pressing Apply.
+**Why:** suggestions (threshold/ratio/makeup, attack) can be applied
+independently or together in any order without undoing each other.
+
 ## Open decisions (need product input)
 * Plugin code `Mxcr` and the Windows installer AppId are kept; confirm they are
   final before the first public release.

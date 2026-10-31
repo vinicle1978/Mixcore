@@ -3,6 +3,7 @@
 #include "Parameters.h"
 #include "PresetManager.h"
 
+#include "mixcore/comp/CompCoach.h"
 #include "mixcore/eq/EqCoach.h"
 #include "mixcore/strip/ChannelStrip.h"
 
@@ -57,6 +58,23 @@ public:
     bool readDebleedTelemetry(drum::DeBleedTelemetry& out) noexcept { return strip_.debleed().readTelemetry(out); }
     bool readReplaceTelemetry(drum::ReplaceTelemetry& out) noexcept { return strip_.replacer().readTelemetry(out); }
     bool readEqTelemetry(eq::EqTelemetry& out) noexcept { return strip_.eq().readTelemetry(out); }
+    bool readCompTelemetry(comp::CompTelemetry& out) noexcept { return strip_.comp().readTelemetry(out); }
+
+    // ---- Compressor (message thread) ----
+    /// Loads a compressor profile (compressor settings only) and switches the compressor on.
+    bool loadCompProfile(const juce::String& name);
+    /// Listen & suggest: analyses the levels going into the compressor.
+    void startCompListen(double seconds);
+    void cancelCompListen() noexcept { compListener_.cancel(); }
+    bool compListening() const noexcept { return compListener_.listening(); }
+    bool compListenReady() const noexcept { return compListener_.ready(); }
+    float compListenProgress() const noexcept { return compListener_.progress(); }
+    std::vector<comp::CompSuggestion> compSuggestions() const;
+    comp::LevelStats compListenStats() const { return compListener_.stats(reader_.readComp().detector); }
+    /// Writes the suggested settings as undoable host parameter changes and switches the compressor on.
+    void applyCompSuggestion(const comp::CompSuggestion& s);
+    /// Feeds the listener from the level tap (called by the timer; public for tests).
+    void pumpCompListener();
 
     // ---- EQ (message thread) ----
     const eq::SpectrumTap& eqInputTap() const noexcept { return strip_.eq().inputTap(); }
@@ -134,6 +152,7 @@ private:
     void applyGateToParameters(const gate::GateSettings& g);
     void applyDrumToParameters(const drum::DrumSettings& d);
     void applyEqToParameters(const eq::EqSettings& e);
+    void applyCompToParameters(const comp::CompSettings& c);
     void setEqBandParameters(int band, const eq::EqBand& b);
     void publishKit(std::unique_ptr<drum::SampleKit> kit, const juce::String& source);
     void setCurrentPreset(const juce::String& name, bool isUser, const strip::ChannelSettings& settings);
@@ -147,6 +166,7 @@ private:
     PresetManager presets_;
     juce::AudioFormatManager formats_;
     eq::EqListener eqListener_;
+    comp::CompListener compListener_;
     std::uint64_t eqFed_ = 0;
     std::vector<float> eqFrame_;
     strip::ChannelSettings currentPresetSettings_ {};

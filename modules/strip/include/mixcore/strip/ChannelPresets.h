@@ -24,6 +24,7 @@ struct ChannelPreset
     std::string gateProfile; ///< Name of the gate profile used.
     std::string kit;         ///< Starter kit for drum replacement ("" = keep the current kit).
     std::string eqProfile;   ///< EQ profile loaded (EQ stays off).
+    std::string compProfile; ///< Compressor profile loaded (compressor stays off).
     ChannelSettings settings;
 };
 

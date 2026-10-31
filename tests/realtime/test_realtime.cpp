@@ -140,6 +140,7 @@ TEST_CASE("The full channel strip (Smart Gain + De-bleed + Gate) never allocates
     mixcore::gate::GateTelemetry gt;
     mixcore::drum::DeBleedTelemetry dt;
     mixcore::drum::ReplaceTelemetry rt;
+    mixcore::comp::CompTelemetry ct;
     SmartGainTelemetry st;
     std::size_t allocations = 0, frees = 0;
     int block = 0;
@@ -163,6 +164,14 @@ TEST_CASE("The full channel strip (Smart Gain + De-bleed + Gate) never allocates
         s.eq.bands[0].slope = (block / 71) % 2 ? 48.0f : 12.0f;           // section count changes
         s.eq.bands[3].gainDb = static_cast<float>(block % 13) - 6.0f;     // coefficient glides
         s.eq.bands[3].freqHz = 200.0f + static_cast<float>(block % 17) * 300.0f;
+        s.comp.enabled = (block / 43) % 3 != 2;                           // compressor on/off
+        s.comp.thresholdDb = -30.0f + static_cast<float>(block % 11);
+        s.comp.attackMs = (block / 31) % 2 ? 1.0f : 30.0f;               // coefficient changes
+        s.comp.scHpfHz = 60.0f + static_cast<float>(block % 6) * 40.0f;   // sidechain filter redesigns
+        s.comp.autoRelease = (block / 67) % 2 == 0;
+        s.comp.autoMakeup = (block / 59) % 2 == 0;
+        s.comp.detector = (block / 23) % 2 ? mixcore::comp::Detector::Peak : mixcore::comp::Detector::Rms;
+        s.comp.mixPercent = static_cast<float>(block % 5) * 25.0f;
         if (block == 400)
             strip.debleed().resetLearning();
         float* ptrs[2] = { l.data() + pos, r.data() + pos };
@@ -173,6 +182,7 @@ TEST_CASE("The full channel strip (Smart Gain + De-bleed + Gate) never allocates
         strip.debleed().readTelemetry(dt);
         strip.replacer().readTelemetry(rt);
         strip.gain().readTelemetry(st);
+        strip.comp().readTelemetry(ct);
         allocations += check.counts().allocations;
         frees += check.counts().deallocations;
     }

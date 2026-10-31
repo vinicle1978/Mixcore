@@ -109,6 +109,25 @@ latency. Switch it on with its power button or **EQ ON**.
   less harshness or more air, and says why. **Nothing changes until you press
   Apply.** Trust your ears over the suggestions.
 
+## 8d. Compressor (optional)
+
+The **Comp** tab is a zero-latency compressor. Switch it on with its power
+button or **COMP ON**.
+
+* **Load comp profile...** gives a starting point for the source (Lead Vocal,
+  Backing Vocal, Speech, Kick, Snare, Toms, Instrument, Parallel Punch).
+  Channel presets already prepare one, with the compressor off.
+* The square graph shows the curve and a dot for the level right now. Drag it
+  left/right to set the threshold; the mouse wheel changes the ratio. The graph
+  beside it shows the gain reduction over the last 10 seconds.
+* **Auto release** lets go faster after short peaks and slower after long loud
+  passages. **Auto makeup** keeps the level about the same when you switch the
+  compressor on. **Mix** below 100 % is parallel compression.
+* **Listen & suggest:** play the source normally for 8 seconds, loud and quiet
+  parts. MixCore measures the levels and suggests a threshold, ratio and makeup
+  (and, when useful, an attack time), with the reason. **Nothing changes until
+  you press Apply.**
+
 ## 9. Mix Coach
 
 The coach panel explains anything worth attention — what was detected, why it

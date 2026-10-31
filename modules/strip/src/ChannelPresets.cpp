@@ -2,6 +2,7 @@
 
 #include "mixcore/gain/SmartGainPresets.h"
 #include "mixcore/drum/DrumProfiles.h"
+#include "mixcore/comp/CompProfiles.h"
 #include "mixcore/eq/EqProfiles.h"
 #include "mixcore/gate/GateProfiles.h"
 
@@ -96,6 +97,22 @@ std::vector<ChannelPreset> build()
                 p.eqProfile = e->name;
             }
         }
+        // Compressor starting point for this source (the compressor stays off too).
+        {
+            const char* compName = g.category == "Backing Vocal" ? "Backing Vocal"
+                                   : g.category == "Lead Vocal"  ? "Lead Vocal"
+                                   : g.category == "Speech"      ? "Speech"
+                                   : g.name == "Kick Drum"       ? "Kick"
+                                   : g.name == "Snare Drum"      ? "Snare"
+                                   : g.name == "Toms"            ? "Toms"
+                                                                 : "Instrument";
+            if (const auto* c = comp::findCompProfile(compName))
+            {
+                p.settings.comp = c->settings;
+                p.settings.comp.enabled = false;
+                p.compProfile = c->name;
+            }
+        }
         // Replacement detector tuned per drum (replacement itself stays off).
         if (g.name == "Kick Drum")
         {
@@ -150,6 +167,7 @@ ChannelSettings applyChannelPreset(const ChannelSettings& current, const Channel
     s.gate = preset.gate;
     s.drum = preset.drum;
     s.eq = preset.eq;
+    s.comp = preset.comp;
     s.validate();
     return s;
 }
@@ -160,7 +178,8 @@ bool matchesChannelPreset(const ChannelSettings& current, const ChannelSettings&
            && gain::matchesPreset(current.gain, preset.gain, tolerance)
            && gate::gateSettingsMatch(current.gate, preset.gate, tolerance)
            && drumSettingsMatch(current.drum, preset.drum, tolerance)
-           && eq::approximatelyEqual(current.eq, preset.eq, tolerance);
+           && eq::approximatelyEqual(current.eq, preset.eq, tolerance)
+           && comp::approximatelyEqual(current.comp, preset.comp, tolerance);
 }
 
 std::string serialiseGate(const ChannelSettings& s) { return s.gate.serialise(); }

@@ -12,8 +12,9 @@ add_executable(mixcore_tests
     dsp/test_modules.cpp
     dsp/test_replace.cpp
     dsp/test_eq.cpp
+    dsp/test_comp.cpp
     regression/test_regression.cpp)
-target_link_libraries(mixcore_tests PRIVATE mixcore::gain mixcore::gate mixcore::drum mixcore::eq mixcore::strip Catch2::Catch2WithMain)
+target_link_libraries(mixcore_tests PRIVATE mixcore::gain mixcore::gate mixcore::drum mixcore::eq mixcore::comp mixcore::strip Catch2::Catch2WithMain)
 target_compile_definitions(mixcore_tests PRIVATE
     MIXCORE_REGRESSION_DIR="${CMAKE_CURRENT_SOURCE_DIR}/regression/reference")
 mixcore_set_warnings(mixcore_tests)
@@ -23,7 +24,7 @@ catch_discover_tests(mixcore_tests TEST_PREFIX "unit:" PROPERTIES LABELS "unit")
 add_executable(mixcore_realtime_tests
     realtime/test_realtime.cpp
     support/AllocationTracker.cpp)
-target_link_libraries(mixcore_realtime_tests PRIVATE mixcore::gain mixcore::drum mixcore::eq mixcore::strip Catch2::Catch2WithMain)
+target_link_libraries(mixcore_realtime_tests PRIVATE mixcore::gain mixcore::drum mixcore::eq mixcore::comp mixcore::strip Catch2::Catch2WithMain)
 find_package(Threads REQUIRED)
 target_link_libraries(mixcore_realtime_tests PRIVATE Threads::Threads)
 mixcore_set_warnings(mixcore_realtime_tests)

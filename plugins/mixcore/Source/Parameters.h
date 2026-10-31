@@ -57,6 +57,19 @@ inline constexpr const char* gateLookahead = "gateLookahead";
 inline constexpr const char* smartGainOn = "smartGainOn";
 inline constexpr const char* sourceType = "sourceType";
 
+inline constexpr const char* compOn = "compOn";
+inline constexpr const char* compThreshold = "compThreshold";
+inline constexpr const char* compRatio = "compRatio";
+inline constexpr const char* compKnee = "compKnee";
+inline constexpr const char* compAttack = "compAttack";
+inline constexpr const char* compRelease = "compRelease";
+inline constexpr const char* compAutoRelease = "compAutoRelease";
+inline constexpr const char* compMakeup = "compMakeup";
+inline constexpr const char* compAutoMakeup = "compAutoMakeup";
+inline constexpr const char* compMix = "compMix";
+inline constexpr const char* compScHpfOn = "compScHpfOn";
+inline constexpr const char* compScHpf = "compScHpf";
+inline constexpr const char* compDetector = "compDetector";
 inline constexpr const char* eqOn = "eqOn";
 inline constexpr const char* eqOutput = "eqOutput";
 inline constexpr const char* drumOn = "drumOn";
@@ -154,9 +167,11 @@ public:
         c.gate = readGate();
         c.drum = readDrum();
         c.eq = readEq();
+        c.comp = readComp();
         return c;
     }
     eq::EqSettings readEq() const noexcept;
+    comp::CompSettings readComp() const noexcept;
 
 private:
     std::vector<std::pair<std::atomic<float>*, float gain::SmartGainSettings::*>> floats_;
@@ -174,6 +189,12 @@ private:
     std::array<EqBandRaw, eq::kNumBands> eqBands_ {};
     std::atomic<float>* eqOn_ = nullptr;
     std::atomic<float>* eqOut_ = nullptr;
+    struct CompRaw
+    {
+        std::atomic<float>*on = nullptr, *threshold = nullptr, *ratio = nullptr, *knee = nullptr, *attack = nullptr, *release = nullptr,
+        *autoRelease = nullptr, *makeup = nullptr, *autoMakeup = nullptr, *mix = nullptr, *hpfOn = nullptr, *hpf = nullptr,
+        *detector = nullptr;
+    } comp_;
     std::atomic<float>* gainOn_ = nullptr;
     std::atomic<float>* source_ = nullptr;
     std::vector<std::pair<std::atomic<float>*, float drum::DrumSettings::*>> drumFloats_;

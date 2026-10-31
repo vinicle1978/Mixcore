@@ -15,12 +15,12 @@ Timing-sensitive suites (`realtime`, `performance`) are marked `RUN_SERIAL`.
 
 * **Date:** 2026-10-31 · **Commit:** see `git log` · **Machine:** Linux x86_64 dev
   container, 2 vCPU Intel Xeon @ 2.10 GHz, GCC 13.3, JUCE 8.0.4, Catch2 3.7.1.
-* **Result: 140 / 140 CTest tests passed** (after the parametric EQ; 122 / 122 after the Mix control; 121 / 121 after drum replacement; 101 / 101 after module power + source type; 93 / 93 after the VineAudio rebrand; 90 / 90 after drum de-bleed; 74 / 74 after the gate, 48 / 48 with presets, 37 / 37 before) (three consecutive parallel runs), and
+* **Result: 161 / 161 CTest tests passed** (after the compressor; 140 / 140 after the parametric EQ; 122 / 122 after the Mix control; 121 / 121 after drum replacement; 101 / 101 after module power + source type; 93 / 93 after the VineAudio rebrand; 90 / 90 after drum de-bleed; 74 / 74 after the gate, 48 / 48 with presets, 37 / 37 before), and
   again from a **fresh clone configured exactly like the Linux CI job**
   (JUCE/Catch2 fetched from GitHub, engine `-Werror`).
 * Engine + tests also built with **Clang 18 / libc++ with `-Werror`**: all
-  103 engine tests pass; Clang plugin build: 140 / 140.
-* **AddressSanitizer + UBSan:** 103 / 103 clean. **ThreadSanitizer:** all
+  118 engine tests pass; Clang plugin build: 161 / 161.
+* **AddressSanitizer + UBSan:** 118 / 118 clean. **ThreadSanitizer:** all
   realtime/thread tests clean (the 10-minute performance test is too slow
   under TSan's instrumentation and is only meaningful in Release).
 * Timing note: the realtime block-time test fails if another build is using
@@ -168,6 +168,26 @@ listening tests are required.
 | Coach | resonance found at 2 kHz with a bounded narrow cut, wording follows the source type; mud on a vocal-shaped signal; rumble → high-pass; nothing invented on clean pink noise; silence ignored (found and fixed: straight-line spectral fits tilted toward the bump and missed mud — now source reference curves + neighbour-relative rules) | pass |
 | Realtime | strip no-allocation test toggles the EQ and moves bands | pass |
 | Plugin | params and defaults; +9 dB bell measured through `processBlock` with unchanged latency; band off = unity; profiles; Listen & suggest changes nothing until Apply, Apply sets the band and switches the EQ on; user preset v5 round-trip, v4 loads with EQ off; EQ page renders on and off | pass |
+
+## Compressor tests
+
+| Requirement | Test | Result |
+|---|---|---|
+| Settings | defaults, clamping (incl. NaN), serialise round-trip, garbage ignored | pass |
+| Static curve | below threshold 0; slope 1/ratio; soft knee continuous at both edges, ¼ at the threshold; monotonic output; threshold solver inverts it | pass |
+| Ratio | 1 kHz sine at −8 dBFS RMS, −20 dB / 4:1 → −9.0 dB (±0.25) | pass |
+| Attack / release | DC steps: one time constant gives 63 % of the 18 dB change in and out (±0.3 dB) | pass |
+| Auto release | 150 ms after the loud part: 3 s passage holds > 5× the reduction of a 20 ms peak (found and tuned: slow-branch attack 150 → 300 ms, short peaks were held 1.7 dB) | pass |
+| Makeup | manual +6 dB exact; auto makeup keeps compressed material within 2 dB of its original level | pass |
+| Mix / off | 50 % = average of dry and wet gain; Mix 0 % and off bit-exact; on/off switching has no step > 0.01 (a hard switch ≈ 0.4) | pass |
+| Sidechain HPF | 40 Hz sine: > 10 dB reduction without, at least 8 dB less with HPF 150 Hz | pass |
+| Link / blocks / extremes | stereo gain identical on both channels; 64 vs 997 blocks bit-identical; extreme settings finite | pass |
+| Telemetry / tap | GR, detector level; one tap entry per 10 ms, recorded while off | pass |
+| Coach | vocal loud/quiet phrases → ~5 dB on loud phrases at 3:1, makeup > 0, "phrases" wording; even material → 2:1 "already quite even"; drum hits with 1 ms attack → 15 ms (found and fixed: 10 ms crest could not see drum transients — crest is now loud peak vs loud 50 ms RMS); no advice when attack is already slow; silence ignored | pass |
+| Profiles | 8 profiles valid, unique, on; channel presets carry their profile with the compressor off | pass |
+| Strip | runs after the EQ (EQ boost drives it), no latency added | pass |
+| Realtime | strip no-allocation test toggles the compressor, detector, auto modes, attack, HPF, mix | pass |
+| Plugin | parameters match the engine ("20:1 (limit)", "Hard" knee); reduction measured through `processBlock` with unchanged latency; profiles; Listen & suggest changes nothing until Apply, Apply changes only its own values and combines; preset v6 round-trip, v5 loads with it off; Comp page renders | pass |
 
 ## Plugin adapter tests
 

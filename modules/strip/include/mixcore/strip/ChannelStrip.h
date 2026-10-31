@@ -1,6 +1,6 @@
 #pragma once
 // One MixCore channel, in place:
-//   Smart Gain -> Drum de-bleed -> Gate -> Drum replacement -> EQ
+//   Smart Gain -> Drum de-bleed -> Gate -> Drum replacement -> EQ -> Compressor
 // (replacement listens to the signal *before* the gate, so the gate never
 // stops it detecting quiet hits, and its samples are added after the gate, so
 // the gate never cuts their tails).
@@ -13,13 +13,14 @@
 //
 // Latency  = Smart Gain latency (peak guard) + gate latency (lookahead)
 //            + replacement lookahead (only while replacement is on);
-//            de-bleed and EQ add none.
+//            de-bleed, EQ and compressor add none.
 // Bypass   = whole strip: both modules pass audio through their own
 //            latency-matched delays, so a bypassed strip is the input delayed
 //            by exactly the reported latency.
 
 #include "mixcore/gain/SmartGainStage.h"
 #include "mixcore/gain/SourceType.h"
+#include "mixcore/comp/Compressor.h"
 #include "mixcore/drum/DeBleed.h"
 #include "mixcore/drum/DrumReplacer.h"
 #include "mixcore/eq/ParametricEq.h"
@@ -45,6 +46,7 @@ struct ChannelSettings
     gate::GateSettings gate;
     drum::DrumSettings drum;
     eq::EqSettings eq;
+    comp::CompSettings comp;
 
     void validate() noexcept
     {
@@ -52,6 +54,7 @@ struct ChannelSettings
         gate.validate();
         drum.validate();
         eq.validate();
+        comp.validate();
     }
     bool operator==(const ChannelSettings&) const = default;
 };
@@ -66,7 +69,8 @@ public:
         key_.assign(static_cast<size_t>(chunk_) * static_cast<size_t>(channels_), 0.0f);
         return gain_.prepare(sampleRate, maxBlockSize, numChannels) && drum_.prepare(sampleRate, maxBlockSize, numChannels)
                && gate_.prepare(sampleRate, maxBlockSize, numChannels)
-               && replacer_.prepare(sampleRate, maxBlockSize, numChannels) && eq_.prepare(sampleRate, maxBlockSize, numChannels);
+               && replacer_.prepare(sampleRate, maxBlockSize, numChannels) && eq_.prepare(sampleRate, maxBlockSize, numChannels)
+               && comp_.prepare(sampleRate, maxBlockSize, numChannels);
     }
 
     void reset() noexcept
@@ -76,6 +80,7 @@ public:
         gate_.reset();
         replacer_.reset();
         eq_.reset();
+        comp_.reset();
     }
 
     /// Realtime-safe.
@@ -92,6 +97,8 @@ public:
         replacer_.setSettings(s.drum);
         eq_.setBypassed(s.gain.bypass);
         eq_.setSettings(s.eq);
+        comp_.setBypassed(s.gain.bypass);
+        comp_.setSettings(s.comp);
     }
 
     /// Realtime-safe.
@@ -118,6 +125,7 @@ public:
             replacer_.setKeyOffset(gate_.latencySamples());
             replacer_.process(io.data(), key.data(), nCh, n);
             eq_.process(io.data(), nCh, n);
+            comp_.process(io.data(), nCh, n);
         }
     }
 
@@ -132,6 +140,8 @@ public:
     drum::DrumReplacer& replacer() noexcept { return replacer_; }
     eq::ParametricEq& eq() noexcept { return eq_; }
     const eq::ParametricEq& eq() const noexcept { return eq_; }
+    comp::Compressor& comp() noexcept { return comp_; }
+    const comp::Compressor& comp() const noexcept { return comp_; }
     const gain::SmartGainStage& gain() const noexcept { return gain_; }
     const gate::NoiseGate& gate() const noexcept { return gate_; }
     const drum::DeBleed& debleed() const noexcept { return drum_; }
@@ -142,6 +152,7 @@ private:
     gate::NoiseGate gate_;
     drum::DrumReplacer replacer_;
     eq::ParametricEq eq_;
+    comp::Compressor comp_;
     std::vector<float> key_;
     int chunk_ = 512;
     int channels_ = 1;

@@ -5,6 +5,7 @@
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
 
+#include "mixcore/comp/CompProfiles.h"
 #include "mixcore/drum/DrumProfiles.h"
 #include "mixcore/gain/SmartGainPresets.h"
 
@@ -669,7 +670,7 @@ TEST_CASE("User presets include de-bleed; older presets load with it off", "[plu
     setParam(p, ids::drumDebleedLength, 220.0f);
     REQUIRE(p.saveUserPreset("Church Snare").isEmpty());
     const auto text = temp.dir.getChildFile("Church Snare.mixpreset").loadFileAsString();
-    CHECK(text.contains("version=\"5\""));
+    CHECK(text.contains("version=\"6\""));
     CHECK(text.contains("<Drum>"));
 
     MixCoreProcessor q;
@@ -801,7 +802,7 @@ TEST_CASE("User presets keep source type and module power; older files default t
     setParam(p, ids::smartGainOn, 0.0f);
     REQUIRE(p.saveUserPreset("Snare no gain").isEmpty());
     const auto text = temp.dir.getChildFile("Snare no gain.mixpreset").loadFileAsString();
-    CHECK(text.contains("version=\"5\""));
+    CHECK(text.contains("version=\"6\""));
     CHECK(text.contains("source=\"Drum\""));
 
     MixCoreProcessor q;
@@ -1205,7 +1206,7 @@ TEST_CASE("User presets include the EQ; older presets load with it off", "[plugi
     setParam(p, eqParamId(4, EqField::Gain).toRawUTF8(), 3.5f);
     REQUIRE(p.saveUserPreset("Pastor").isEmpty());
     const auto text = temp.dir.getChildFile("Pastor.mixpreset").loadFileAsString();
-    CHECK(text.contains("version=\"5\""));
+    CHECK(text.contains("version=\"6\""));
     CHECK(text.contains("<Eq>"));
 
     MixCoreProcessor q;
@@ -1285,5 +1286,200 @@ TEST_CASE("EQ page renders", "[plugin][eq][editor]")
         f.deleteFile();
         juce::FileOutputStream stream(f);
         juce::PNGImageFormat().writeImageToStream(offImage, stream);
+    }
+}
+
+// ------------------------------------------------------------- Compressor
+
+TEST_CASE("Compressor parameters: off by default, match the engine", "[plugin][comp][params]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    const auto c = p.currentChannelSettings().comp;
+    CHECK_FALSE(c.enabled);
+    // The first preset (Lead Vocal) prepares its starting point.
+    const auto* prof = comp::findCompProfile("Lead Vocal");
+    REQUIRE(prof != nullptr);
+    auto expected = prof->settings;
+    expected.enabled = false;
+    CHECK(comp::approximatelyEqual(c, expected, 1e-3f));
+    CHECK_FALSE(p.isPresetModified());
+    const auto* ratio = p.state().getParameter(ids::compRatio);
+    CHECK(ratio->getText(ratio->convertTo0to1(20.0f), 32) == "20:1 (limit)");
+    CHECK(ratio->getText(ratio->convertTo0to1(3.0f), 32) == "3.0:1");
+    const auto* knee = p.state().getParameter(ids::compKnee);
+    CHECK(knee->getText(0.0f, 32) == "Hard");
+}
+
+TEST_CASE("Compressor reduces in the plugin with zero added latency", "[plugin][comp][audio]")
+{
+    JuceEnv env;
+    MixCoreProcessor flat;
+    setParam(flat, ids::smartGainOn, 0.0f);
+    const float before = runSineThrough(flat, 1000.0); // 0.1 amplitude = -23 dBFS RMS
+    const int latencyOff = flat.getLatencySamples();
+
+    MixCoreProcessor p;
+    setParam(p, ids::smartGainOn, 0.0f);
+    setParam(p, ids::compOn, 1.0f);
+    setParam(p, ids::compThreshold, -35.0f);
+    setParam(p, ids::compRatio, 4.0f);
+    setParam(p, ids::compKnee, 0.0f);
+    setParam(p, ids::compAutoMakeup, 0.0f);
+    setParam(p, ids::compMakeup, 0.0f);
+    setParam(p, ids::compScHpfOn, 0.0f);
+    setParam(p, ids::compDetector, 1.0f); // RMS
+    const float after = runSineThrough(p, 1000.0);
+    const float expected = 0.75f * (before + 35.0f); // reduction above the threshold at 4:1
+    CHECK(before - after == Approx(expected).margin(0.4));
+    CHECK(p.getLatencySamples() == latencyOff);
+    comp::CompTelemetry t;
+    REQUIRE(p.readCompTelemetry(t));
+    CHECK(t.gainReductionDb == Approx(expected).margin(0.6));
+}
+
+TEST_CASE("Compressor profiles load and switch it on", "[plugin][comp][profiles]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    REQUIRE(p.loadCompProfile("Kick"));
+    const auto c = p.currentChannelSettings().comp;
+    CHECK(c.enabled);
+    CHECK(c.detector == comp::Detector::Peak);
+    CHECK(c.attackMs == Approx(20.0f).margin(0.05));
+    CHECK(c.thresholdDb == Approx(-14.0f).margin(0.05));
+    REQUIRE(p.loadCompProfile("Parallel Punch"));
+    CHECK(p.currentChannelSettings().comp.mixPercent == Approx(40.0f).margin(0.05));
+    CHECK_FALSE(p.loadCompProfile("Nope"));
+}
+
+TEST_CASE("Comp Listen & suggest changes nothing until applied; Apply changes only its own values", "[plugin][comp][coach]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    p.loadFactoryPreset("Snare Drum");
+    setParam(p, ids::smartGainOn, 0.0f);
+    setParam(p, ids::compAttack, 1.0f); // fast attack on a drum -> attack advice
+    p.setPlayConfigDetails(1, 1, 48000.0, 480);
+    p.prepareToPlay(48000.0, 480);
+    const auto before = p.currentChannelSettings().comp;
+    p.startCompListen(3.0);
+    REQUIRE(p.compListening());
+
+    juce::Random rng(17);
+    juce::AudioBuffer<float> block(1, 480);
+    juce::MidiBuffer midi;
+    const float amps[] = { 0.9f, 0.4f, 0.7f, 0.25f };
+    for (int b = 0; b < 2000 && p.compListening(); ++b)
+    {
+        for (int i = 0; i < 480; ++i)
+        {
+            const int n = b * 480 + i;
+            const float t = static_cast<float>(n % 12000) / 48000.0f;
+            block.setSample(0, i, amps[(n / 12000) % 4] * std::exp(-t / 0.02f) * (rng.nextFloat() * 2.0f - 1.0f));
+        }
+        p.processBlock(block, midi);
+        p.pumpCompListener();
+    }
+    REQUIRE(p.compListenReady());
+    const auto sugg = p.compSuggestions();
+    REQUIRE(sugg.size() == 2);
+    CHECK(comp::approximatelyEqual(p.currentChannelSettings().comp, before, 1e-4f)); // listening alone changed nothing
+    CHECK(p.compListenStats().loudDb > -20.0f);
+
+    // Attack alone: only the attack changes (and the compressor switches on).
+    const auto& attack = sugg[1];
+    REQUIRE(attack.id == "attack");
+    p.applyCompSuggestion(attack);
+    auto now = p.currentChannelSettings().comp;
+    CHECK(now.enabled);
+    CHECK(now.attackMs == Approx(15.0f).margin(0.05));
+    CHECK(now.thresholdDb == Approx(before.thresholdDb).margin(0.05));
+    // Then the threshold: both changes stay.
+    p.applyCompSuggestion(sugg[0]);
+    now = p.currentChannelSettings().comp;
+    CHECK(now.attackMs == Approx(15.0f).margin(0.05));
+    CHECK(now.thresholdDb == Approx(sugg[0].settings.thresholdDb).margin(0.05));
+    CHECK(now.ratio == Approx(sugg[0].settings.ratio).margin(0.05));
+}
+
+TEST_CASE("User presets include the compressor; older presets load with it off", "[plugin][comp][presets]")
+{
+    JuceEnv env;
+    TempPresetDir temp;
+    MixCoreProcessor p;
+    p.setPresetDirectory(temp.dir);
+    REQUIRE(p.loadCompProfile("Speech"));
+    setParam(p, ids::compRatio, 5.0f);
+    setParam(p, ids::compMix, 70.0f);
+    REQUIRE(p.saveUserPreset("Announcements").isEmpty());
+    const auto text = temp.dir.getChildFile("Announcements.mixpreset").loadFileAsString();
+    CHECK(text.contains("version=\"6\""));
+    CHECK(text.contains("<Comp>"));
+
+    MixCoreProcessor q;
+    q.setPresetDirectory(temp.dir);
+    REQUIRE(q.loadUserPreset("Announcements"));
+    const auto c = q.currentChannelSettings().comp;
+    CHECK(c.enabled);
+    CHECK(c.ratio == Approx(5.0f).margin(0.05));
+    CHECK(c.mixPercent == Approx(70.0f).margin(0.05));
+    CHECK_FALSE(q.isPresetModified());
+
+    temp.dir.getChildFile("Old5.mixpreset")
+        .replaceWithText("<?xml version=\"1.0\"?><MixCorePreset version=\"5\" module=\"SmartGain\" name=\"Old5\">"
+                         "<Settings>targetRmsDb=-20;</Settings><Eq>enabled=1;</Eq></MixCorePreset>");
+    REQUIRE(q.loadUserPreset("Old5"));
+    CHECK_FALSE(q.currentChannelSettings().comp.enabled);
+    CHECK(q.currentChannelSettings().eq.enabled);
+}
+
+TEST_CASE("Comp page renders", "[plugin][comp][editor]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    p.loadFactoryPreset("Lead Vocal - Natural");
+    REQUIRE(p.loadCompProfile("Lead Vocal"));
+    p.setPlayConfigDetails(1, 1, 48000.0, 480);
+    p.prepareToPlay(48000.0, 480);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
+    auto& ed = dynamic_cast<MixCoreEditor&>(*editor);
+    ed.setPage(MixCoreEditor::Page::Comp);
+    p.startCompListen(3.0);
+
+    // Sung phrases with a loud/quiet pattern and short pauses.
+    juce::AudioBuffer<float> block(1, 480);
+    juce::MidiBuffer midi;
+    constexpr double twoPi = 2.0 * juce::MathConstants<double>::pi;
+    const float phraseAmp[] = { 0.35f, 0.12f, 0.5f, 0.2f, 0.28f };
+    for (int b = 0; b < 700; ++b)
+    {
+        for (int i = 0; i < 480; ++i)
+        {
+            const int n = b * 480 + i;
+            const double t = n / 48000.0;
+            const int phrase = n / 36000;
+            const double inPhrase = static_cast<double>(n % 36000) / 36000.0;
+            const float env = inPhrase > 0.85 ? 0.0f : phraseAmp[phrase % 5] * static_cast<float>(0.8 + 0.2 * std::sin(twoPi * 4.0 * t));
+            float v = 0.0f;
+            for (int h = 1; h <= 8; ++h)
+                v += static_cast<float>(std::sin(twoPi * 220.0 * h * t)) / static_cast<float>(h);
+            block.setSample(0, i, env * v * 0.5f);
+        }
+        p.processBlock(block, midi);
+        p.pumpCompListener();
+        if (b % 3 == 0)
+            ed.refresh();
+    }
+    for (int k = 0; k < 12; ++k)
+        ed.refresh();
+    const auto image = ed.createComponentSnapshot(ed.getLocalBounds(), true, 1.0f);
+    CHECK(image.getWidth() == ed.getWidth());
+    if (const char* outDir = std::getenv("MIXCORE_SNAPSHOT_DIR"))
+    {
+        juce::File f(juce::String(outDir) + "/mixcore-comp.png");
+        f.deleteFile();
+        juce::FileOutputStream stream(f);
+        juce::PNGImageFormat().writeImageToStream(image, stream);
     }
 }
