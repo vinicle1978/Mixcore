@@ -8,18 +8,18 @@ app. It is a universal build: Apple Silicon (M-series) and Intel.
 
 1. Push the repository to GitHub.
 2. Open the repo → **Actions** → **Build installers** → **Run workflow**.
-   (Or push a tag such as `v0.1.0`; the installers are then also attached to a
+   (Or push a tag such as `v0.2.0`; the installers are then also attached to a
    GitHub Release.)
 3. Wait for the run to go green (about 10–15 minutes the first time).
 4. Open the run, scroll to **Artifacts**, download **MixCore-macOS-installer**
-   and unzip it. You get `MixCore-0.1.0-macOS.pkg`.
+   and unzip it. You get `MixCore-0.2.0-macOS.pkg`.
 
 The workflow already installed this exact `.pkg` on a Mac runner and passed
 Apple's `auval` validation, which is the same check Logic performs.
 
 ## 2. Install
 
-1. Double-click `MixCore-0.1.0-macOS.pkg`.
+1. Double-click `MixCore-0.2.0-macOS.pkg`.
 2. macOS will say it cannot verify the developer (the installer is not yet
    signed with an Apple Developer ID). Click **Done**, then open
    **System Settings → Privacy & Security**, scroll down and click

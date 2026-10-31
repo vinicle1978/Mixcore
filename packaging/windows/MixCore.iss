@@ -1,6 +1,6 @@
 ; Inno Setup script for the VineAudio MixCore Windows installer.
 ; Built by .github/workflows/build.yml:
-;   iscc /DAppVersion=0.1.0 /DSourceDir=<artefacts dir> /DOutputDir=<dir> packaging\windows\MixCore.iss
+;   iscc /DAppVersion=0.2.0 /DSourceDir=<artefacts dir> /DOutputDir=<dir> packaging\windows\MixCore.iss
 ;
 ; Installs:
 ;   MixCore.vst3 -> C:\Program Files\Common Files\VST3\   (standard VST3 location)

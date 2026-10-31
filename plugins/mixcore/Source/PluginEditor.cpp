@@ -363,9 +363,17 @@ void MixCoreEditor::paint(juce::Graphics& g)
     g.setColour(theme::silver.withAlpha(0.5f));
     g.fillRect(header.getX(), header.getCentreY() - 11, 1, 22);
     header.removeFromLeft(12);
-    g.setColour(theme::text);
-    g.setFont(theme::font(20.0f, true));
-    g.drawText("MixCore", header.removeFromLeft(90), juce::Justification::centredLeft);
+    {
+        auto name = header.removeFromLeft(110);
+        g.setColour(theme::text);
+        g.setFont(theme::font(20.0f, true));
+        g.drawText("MixCore", name.withTrimmedBottom(14).translated(0, 4), juce::Justification::centredLeft);
+        // Version and build (so you can tell which installer is running).
+        g.setColour(theme::muted);
+        g.setFont(theme::font(9.5f));
+        g.drawText("v" + juce::String(JucePlugin_VersionString) + "  (" + juce::String(MIXCORE_BUILD_ID) + ")",
+                   name.withTrimmedTop(34), juce::Justification::topLeft);
+    }
     {
         juce::ColourGradient rule(theme::blue.withAlpha(0.0f), 0.0f, 52.0f, theme::blue.withAlpha(0.0f),
                                   static_cast<float>(getWidth()), 52.0f, false);
@@ -504,6 +512,10 @@ void MixCoreEditor::resized()
         drums.removeFromTop(6);
         drumPanel_.setBounds(drums);
         replacePanel_.setBounds(drums);
+        // On the Drums page the OFF banner sits below the De-bleed / Replace
+        // buttons, so both views stay visible and reachable while the module is off.
+        if (page_ == Page::Drums)
+            offBanner_.setBounds(drums.withHeight(54));
     }
 
     if (!advanced_)

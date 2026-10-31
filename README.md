@@ -9,7 +9,7 @@ live-streaming platform (churches, bands, venues, streams). It is being built
 milestone by milestone, starting from a reliable foundation: the **Smart Gain
 Stage**.
 
-## Status (v0.1.0)
+## Status (v0.2.0)
 
 ### Working and tested
 * **Smart Gain Stage** (lead-vocal profile) as a JUCE-free C++20 library:

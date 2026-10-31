@@ -38,6 +38,16 @@ target_sources(MixCore PRIVATE
 
 target_include_directories(MixCore PRIVATE Source)
 
+# Build identifier shown in the editor header (git commit, or "local").
+execute_process(COMMAND git rev-parse --short HEAD
+                WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+                OUTPUT_VARIABLE MIXCORE_GIT_HASH OUTPUT_STRIP_TRAILING_WHITESPACE
+                ERROR_QUIET RESULT_VARIABLE MIXCORE_GIT_RESULT)
+if(NOT MIXCORE_GIT_RESULT EQUAL 0 OR MIXCORE_GIT_HASH STREQUAL "")
+    set(MIXCORE_GIT_HASH "local")
+endif()
+target_compile_definitions(MixCore PRIVATE MIXCORE_BUILD_ID="${MIXCORE_GIT_HASH}")
+
 # Brand assets (VineAudio logo), compiled into the binary.
 juce_add_binary_data(MixCoreAssets
     HEADER_NAME VineAudioAssets.h
