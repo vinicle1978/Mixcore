@@ -15,7 +15,7 @@ Timing-sensitive suites (`realtime`, `performance`) are marked `RUN_SERIAL`.
 
 * **Date:** 2026-10-29 · **Commit:** see `git log` · **Machine:** Linux x86_64 dev
   container, 2 vCPU Intel Xeon @ 2.10 GHz, GCC 13.3, JUCE 8.0.4, Catch2 3.7.1.
-* **Result: 121 / 121 CTest tests passed** (after drum replacement; 101 / 101 after module power + source type; 93 / 93 after the VineAudio rebrand; 90 / 90 after drum de-bleed; 74 / 74 after the gate, 48 / 48 with presets, 37 / 37 before) (three consecutive parallel runs), and
+* **Result: 122 / 122 CTest tests passed** (after the Mix control; 121 / 121 after drum replacement; 101 / 101 after module power + source type; 93 / 93 after the VineAudio rebrand; 90 / 90 after drum de-bleed; 74 / 74 after the gate, 48 / 48 with presets, 37 / 37 before) (three consecutive parallel runs), and
   again from a **fresh clone configured exactly like the Linux CI job**
   (JUCE/Catch2 fetched from GitHub, engine `-Werror`).
 * Engine + tests also built with **Clang 18 / libc++ with `-Werror`**: all
@@ -141,6 +141,7 @@ listening tests are required.
 | Velocity | output rises monotonically with hit strength; Dynamics 0 = identical hits | pass |
 | Layers / round robin | quiet hit → quietest layer; loud hits → loudest layer, alternating variations | pass |
 | Pitch / resampling | 0 / +12 / −12 st → 1000 / 2000 / 500 Hz (±1 %); 44.1 kHz sample at 48 kHz keeps pitch | pass |
+| Mix | 0 / 25 / 50 / 75 / 100 % → original + sample = 0.2+0, 0.2+0.25, 0.2+0.5, 0.1+0.5, 0+0.5 | pass |
 | Attack / Length | 10 ms fade-in shape; 50 ms length silent afterwards | pass |
 | Block size | 64 vs 997: bit-identical | pass |
 | Kits | auto layering (5 files → 3 layers, RR grouping, silent dropped, cap merges), describe(); starter kits 3×2, layers ≥ 2 dB apart | pass |

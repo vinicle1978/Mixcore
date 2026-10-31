@@ -887,6 +887,7 @@ TEST_CASE("Drum module master switch and replacement parameters", "[plugin][repl
     CHECK_FALSE(p.state().getParameter(ids::replaceLookahead)->isAutomatable());
     CHECK(p.state().getParameter(ids::replaceOriginal)->getText(0.0f, 16) == "Off");
     CHECK(p.state().getParameter(ids::replaceLength)->getText(1.0f, 16) == "Full");
+    CHECK(p.currentChannelSettings().drum.replaceMix == Approx(50.0f)); // blend by default
     CHECK(p.kitSource().isEmpty());
 
     REQUIRE(p.loadFactoryPreset("Kick Drum"));
@@ -1009,6 +1010,7 @@ TEST_CASE("Replace view renders", "[plugin][replace][editor]")
     p.loadFactoryPreset("Snare Drum");
     setParam(p, ids::drumReplace, 1.0f);
     setParam(p, ids::replaceOriginal, -6.0f);
+    setParam(p, ids::replaceMix, 60.0f);
     setParam(p, ids::replaceThreshold, -24.0f);
     p.setPlayConfigDetails(1, 1, 48000.0, 480);
     p.prepareToPlay(48000.0, 480);
@@ -1047,4 +1049,16 @@ TEST_CASE("Replace view renders", "[plugin][replace][editor]")
         juce::FileOutputStream stream(f);
         juce::PNGImageFormat().writeImageToStream(image, stream);
     }
+}
+
+TEST_CASE("Replacement Mix is continuous (any value, 0.1 % resolution)", "[plugin][replace][mix]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    for (float v : { 0.0f, 12.3f, 37.0f, 50.0f, 61.7f, 88.8f, 100.0f })
+    {
+        setParam(p, ids::replaceMix, v);
+        CHECK(p.currentChannelSettings().drum.replaceMix == Approx(v).margin(0.051f));
+    }
+    CHECK(p.state().getParameter(ids::replaceMix)->getText(p.state().getParameter(ids::replaceMix)->convertTo0to1(61.7f), 16) == "61.7 %");
 }

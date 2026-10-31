@@ -36,6 +36,7 @@ public:
 
     void update(const drum::ReplaceTelemetry& t, bool fresh);
     void resized() override;
+    void paint(juce::Graphics& g) override;
     /// Text for the right-hand column.
     juce::String statusText(const drum::ReplaceTelemetry& t) const;
     /// Re-reads the kit name/description (after presets or sessions load a kit).
@@ -66,6 +67,8 @@ private:
     std::unique_ptr<juce::FileChooser> chooser_;
     juce::String lastKitSource_ { "<never>" };
     juce::String message_;
+    size_t heroIndex_ = 0;
+    juce::Rectangle<int> heroArea_;
 };
 
 } // namespace mixcore::plugin

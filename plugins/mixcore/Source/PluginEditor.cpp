@@ -1,5 +1,9 @@
 #include "PluginEditor.h"
 
+#ifndef MIXCORE_BUILD_ID
+ #define MIXCORE_BUILD_ID "local" // set by plugins/mixcore/CMakeLists.txt from git
+#endif
+
 #include "mixcore/strip/ChannelPresets.h"
 #include "mixcore/strip/StripCoach.h"
 

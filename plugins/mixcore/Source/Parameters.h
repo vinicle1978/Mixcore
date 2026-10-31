@@ -63,6 +63,7 @@ inline constexpr const char* replaceThreshold = "replaceThreshold";
 inline constexpr const char* replaceRetrigger = "replaceRetrigger";
 inline constexpr const char* replaceDynamics = "replaceDynamics";
 inline constexpr const char* replaceRange = "replaceRange";
+inline constexpr const char* replaceMix = "replaceMix";
 inline constexpr const char* replaceSample = "replaceSample";
 inline constexpr const char* replaceOriginal = "replaceOriginal";
 inline constexpr const char* replacePitch = "replacePitch";

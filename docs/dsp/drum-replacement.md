@@ -30,7 +30,8 @@ velocity = loudest key peak during the Lookahead window after the hit
 sample   = layer floor(velocity x layers) [quiet -> loud], next round robin
            gain sqrt(velocity) x Sample level; pitch, Attack fade-in, Length fade-out
 
-output   = original delayed by Lookahead x Original level + samples
+output   = original delayed by Lookahead x Original level x min(1, 2(1-Mix))
+         + samples x Sample level x min(1, 2 Mix)
 ```
 
 ### Timing
@@ -58,8 +59,9 @@ on or off fades out over 5 ms, changes the latency, then fades back in.
 | Retrigger | 5–500 ms | 40 | Minimum time between hits |
 | Dynamics | 0–100 % | 100 | 0 % = every hit at full velocity |
 | Range | 6–48 dB | 24 | Input range above the threshold mapped to velocity 0–1 (Advanced) |
-| Sample | −40…+12 dB | 0 | Sample level |
-| Original | Off (−60)…+12 dB | 0 | Off = pure replacement |
+| Mix | 0–100 % | 50 % | 0 % = original only · 50 % = both at full level (augmentation) · 100 % = samples only (replacement) |
+| Sample | −40…+12 dB | 0 | Sample level trim |
+| Original | Off (−60)…+12 dB | 0 | Original level trim; Off = never heard |
 | Pitch | ±12 semitones | 0 | |
 | Attack | 0–30 ms | 0 | Fade-in at the start of each sample |
 | Length | 20 ms…Full | Full | Fade-out over the last ⅓ (at most 30 ms) |

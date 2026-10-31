@@ -86,6 +86,7 @@ const std::vector<DrumFloatParamSpec>& drumFloatParamSpecs()
         { ids::replaceRetrigger, "Replace Retrigger", &D::replaceRetriggerMs, 5.0f, 500.0f, 1.0f, 60.0f, "ms", 0, false },
         { ids::replaceDynamics, "Replace Dynamics", &D::replaceDynamics, 0.0f, 100.0f, 1.0f, 0.0f, "%", 0, false },
         { ids::replaceRange, "Replace Range", &D::replaceRangeDb, 6.0f, 48.0f, 0.5f, 0.0f, "dB", 1, true },
+        { ids::replaceMix, "Replace Mix", &D::replaceMix, 0.0f, 100.0f, 0.1f, 0.0f, "%", 1, false },
         { ids::replaceSample, "Replace Sample Level", &D::replaceSampleDb, -40.0f, 12.0f, 0.1f, 0.0f, "dB", 1, false },
         { ids::replaceOriginal, "Replace Original Level", &D::replaceOriginalDb, -60.0f, 12.0f, 0.1f, 0.0f, "dB", 1, false },
         { ids::replacePitch, "Replace Pitch", &D::replacePitchSt, -12.0f, 12.0f, 0.1f, 0.0f, "st", 1, false },

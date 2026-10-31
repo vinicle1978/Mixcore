@@ -31,6 +31,7 @@ constexpr FloatField kFloatFields[] = {
     { "replaceRetriggerMs", &DrumSettings::replaceRetriggerMs, 5.0f, 500.0f },
     { "replaceDynamics", &DrumSettings::replaceDynamics, 0.0f, 100.0f },
     { "replaceRangeDb", &DrumSettings::replaceRangeDb, 6.0f, 48.0f },
+    { "replaceMix", &DrumSettings::replaceMix, 0.0f, 100.0f },
     { "replaceSampleDb", &DrumSettings::replaceSampleDb, -40.0f, 12.0f },
     { "replaceOriginalDb", &DrumSettings::replaceOriginalDb, -60.0f, 12.0f },
     { "replacePitchSt", &DrumSettings::replacePitchSt, -12.0f, 12.0f },

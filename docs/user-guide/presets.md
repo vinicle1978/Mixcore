@@ -128,8 +128,11 @@ Open **Drums → Replace**.
    = how hard it was hit) and bleed does not. On the kick, **Detect High** ~200 Hz
    ignores the snare; on the snare, **Detect Low** ~150 Hz ignores the kick (the
    drum presets set these for you).
-4. Blend: **Original Off** = pure replacement; Original and Sample both up =
-   augmentation (a fatter, more consistent drum that keeps the player's feel).
+4. Blend with **Mix**: 0 % = only the real drum, **50 % = real drum and sample
+   both at full level** (augmentation: a fatter, more consistent drum that keeps
+   the player's feel), 100 % = sample only (full replacement). Anything in
+   between is a blend, e.g. 30 % = mostly the real drum with a little sample
+   underneath. **Sample** and **Original** are level trims for each side.
 5. Shape: **Dynamics** (100 % follows the drummer, 0 % = every hit the same),
    **Pitch**, **Attack** (softens the click), **Length** (shortens long samples).
 6. **Live / Studio**: Live adds 1.5 ms latency (fine for in-ears); Studio adds

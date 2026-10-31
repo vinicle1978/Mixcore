@@ -28,7 +28,10 @@ struct DrumSettings
     float replaceRetriggerMs = 40.0f;    ///< Minimum time between two hits (rejects double triggers). [5, 500].
     float replaceDynamics = 100.0f;      ///< 0 % = every hit at full velocity; 100 % = follow the playing. [0, 100].
     float replaceRangeDb = 24.0f;        ///< Input range above the threshold mapped to velocity 0..1. [6, 48].
-    float replaceSampleDb = 0.0f;        ///< Level of the triggered samples. [-40, 12].
+    /// Blend between the original and the samples: 0 % = original only,
+    /// 50 % = both at full level (augmentation), 100 % = samples only (replacement). [0, 100].
+    float replaceMix = 50.0f;
+    float replaceSampleDb = 0.0f;        ///< Level of the triggered samples (trim). [-40, 12].
     float replaceOriginalDb = 0.0f;      ///< Level of the original drum; -60 = off (pure replacement). [-60, 12].
     float replacePitchSt = 0.0f;         ///< Sample pitch, semitones. [-12, 12].
     float replaceAttackMs = 0.0f;        ///< Fade-in at the start of each sample (softens the transient). [0, 30].

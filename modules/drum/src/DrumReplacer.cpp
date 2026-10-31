@@ -87,8 +87,10 @@ void DrumReplacer::reset() noexcept
     latency_.store(wantLatency_, std::memory_order_relaxed);
     fade_ = 1.0f;
     mix_ = active ? 1.0f : 0.0f;
-    originalGain_ = settings_.replaceOriginalDb <= -59.9f ? 0.0f : dbToGain(settings_.replaceOriginalDb);
-    sampleGain_ = dbToGain(settings_.replaceSampleDb);
+    const float mix = settings_.replaceMix * 0.01f;
+    originalGain_ = (settings_.replaceOriginalDb <= -59.9f ? 0.0f : dbToGain(settings_.replaceOriginalDb))
+                    * std::min(1.0f, 2.0f * (1.0f - mix));
+    sampleGain_ = dbToGain(settings_.replaceSampleDb) * std::min(1.0f, 2.0f * mix);
     tick_ = 0;
     tickDet_ = 0.0f;
     tickHits_ = 0;
@@ -255,8 +257,12 @@ void DrumReplacer::process(float* const* audio, const float* const* key, int num
     const float rearm = thr * kRearmRatio;
     const int retrigger = msToSamples(static_cast<double>(settings_.replaceRetriggerMs), sampleRate_);
     const float dynamics = settings_.replaceDynamics * 0.01f;
-    const float targetOriginal = settings_.replaceOriginalDb <= -59.9f ? 0.0f : dbToGain(settings_.replaceOriginalDb);
-    const float targetSample = dbToGain(settings_.replaceSampleDb);
+    // Mix: original fades out over the upper half, samples fade in over the lower half;
+    // at 50 % both play at full level (augmentation).
+    const float mix = settings_.replaceMix * 0.01f;
+    const float targetOriginal = (settings_.replaceOriginalDb <= -59.9f ? 0.0f : dbToGain(settings_.replaceOriginalDb))
+                                 * std::min(1.0f, 2.0f * (1.0f - mix));
+    const float targetSample = dbToGain(settings_.replaceSampleDb) * std::min(1.0f, 2.0f * mix);
 
     // Off and settled: untouched audio, zero latency.
     if (!active && !keepLatency && mix_ == 0.0f && latency_.load(std::memory_order_relaxed) == 0 && fade_ >= 1.0f)

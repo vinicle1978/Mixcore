@@ -15,6 +15,7 @@
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <tuple>
 #include <vector>
 
 using namespace mixcore;
@@ -363,6 +364,31 @@ TEST_CASE("Pitch and sample-rate conversion", "[drum][replace][pitch]")
         const double hz = measureHz(out, static_cast<size_t>(0.2 * kSr), static_cast<size_t>(0.4 * kSr), kSr);
         INFO("pitch " << pitch << " sample rate " << sampleSr << ": " << hz << " Hz");
         CHECK(hz == Approx(expected).epsilon(0.01));
+    }
+}
+
+TEST_CASE("Mix blends original and samples: 0 % original, 50 % both full, 100 % samples", "[drum][replace][mix]")
+{
+    // Original: a flat 0.2 level from 0.2 s; sample: a flat 0.5 marker. Measured 100 ms after the hit.
+    Signal in(static_cast<size_t>(1.0 * kSr), 0.0f);
+    for (size_t i = static_cast<size_t>(0.2 * kSr); i < in.size(); ++i)
+        in[i] = 0.2f;
+    const size_t at = static_cast<size_t>(0.3 * kSr);
+    struct Case
+    {
+        float mix, original, sample;
+    };
+    for (const Case c : { Case { 0.0f, 0.2f, 0.0f }, Case { 25.0f, 0.2f, 0.25f }, Case { 50.0f, 0.2f, 0.5f },
+                          Case { 75.0f, 0.1f, 0.5f }, Case { 100.0f, 0.0f, 0.5f } })
+    {
+        DrumSettings s = replaceSettings();
+        s.replaceOriginalDb = 0.0f;
+        s.replaceMix = c.mix;
+        DrumReplacer r;
+        setup(r, s, markerKit({ { 0.5f } }, 24000));
+        const auto out = run(r, in);
+        INFO("mix " << c.mix);
+        CHECK(out[at] == Approx(c.original + c.sample).margin(1e-4));
     }
 }
 

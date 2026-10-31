@@ -50,7 +50,7 @@ Stage**.
   with host parameters, state save/restore, host bypass, latency reporting and
   an editor showing live meters, gain chain, 20 s rider history, calibration
   and Mix Coach.
-* **121 automated tests** (unit, integration, regression, realtime, performance,
+* **122 automated tests** (unit, integration, regression, realtime, performance,
   plugin) — all passing on Linux; engine also passes under Clang/libc++
   `-Werror`, ASan/UBSan and TSan. Details: [`docs/testing/test-plan.md`](docs/testing/test-plan.md).
 

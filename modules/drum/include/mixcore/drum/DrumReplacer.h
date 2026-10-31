@@ -8,7 +8,8 @@
 //   velocity = loudest key peak during the Lookahead window after the hit,
 //          mapped over Range dB above the threshold, scaled by Dynamics
 //   sample = velocity layer (quiet -> loud) + round robin, pitch, attack, length
-//   output = original (delayed by Lookahead) x Original level + samples x Sample level
+//   output = original (delayed by Lookahead) x Original level x mixO + samples x Sample level x mixS
+//            Mix 0 % = original only, 50 % = both full (augment), 100 % = samples only (replace)
 //
 // Timing: the original is delayed by the lookahead; each sample starts exactly
 // where the hit's threshold crossing lands in the delayed original, so
