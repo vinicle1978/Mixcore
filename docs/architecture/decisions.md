@@ -205,6 +205,14 @@ before the switch existed load with it on if de-bleed was on.
 **Why:** one clear "is the drum module doing anything" control per the module
 power design (ADR-024), with independent sub-processes.
 
+## ADR-028 — Replacement MIX is the "hero" control, with red accents
+**Decision:** the replacement Mix knob is drawn twice the size, framed, with a
+silver (original) to blue (sample) ring, a 50 % mark, ORIGINAL/SAMPLE end
+captions, and red accents (rim, pointer, end dot, frame). This is the one
+deliberate use of red outside warnings and safety.
+**Why:** user: Mix is the most important replacement control and should draw
+the eye. Red elsewhere still means "look here" (clipping, guard, reduction).
+
 ## Open decisions (need product input)
 * Plugin code `Mxcr` and the Windows installer AppId are kept; confirm they are
   final before the first public release.
