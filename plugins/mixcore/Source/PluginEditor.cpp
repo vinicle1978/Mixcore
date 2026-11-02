@@ -8,11 +8,12 @@
 #include "mixcore/strip/StripCoach.h"
 
 #include <array>
+#include <cmath>
 
 namespace mixcore::plugin {
 
 namespace {
-constexpr int kWidth = 1000;
+constexpr int kWidth = 1080;
 constexpr int kHeight = 640;
 constexpr int kTimerHz = 30;
 
@@ -129,13 +130,16 @@ MixCoreEditor::MixCoreEditor(MixCoreProcessor& p) : AudioProcessorEditor(&p), pr
     debleedChip_.setTooltip("Drums: de-bleed reduction, or HIT when replacement triggers a sample. Click to open the Drums page.");
     styleChip(gateChip_, theme::good);
     gateChip_.setTooltip("Gate: gain reduction applied after Smart Gain. Click to open the Gate page.");
+    styleChip(satChip_, theme::ice);
+    satChip_.setTooltip("Saturation: harmonics being added right now. Click to open the Sat page.");
+    satChip_.addMouseListener(this, false);
     styleChip(compChip_, theme::ice);
     compChip_.setTooltip("Compressor: gain reduction right now. Click to open the Comp page.");
     compChip_.addMouseListener(this, false);
     styleChip(eqChip_, theme::ice);
     eqChip_.setTooltip("EQ: number of active bands. Click to open the EQ page.");
     eqChip_.addMouseListener(this, false);
-    for (auto* c : { &staticChip_, &riderChip_, &guardChip_, &debleedChip_, &gateChip_, &eqChip_, &compChip_ })
+    for (auto* c : { &staticChip_, &riderChip_, &guardChip_, &debleedChip_, &gateChip_, &eqChip_, &compChip_, &satChip_ })
     {
         c->setFont(theme::font(12.5f, true));
         c->setMinimumHorizontalScale(0.6f);
@@ -144,7 +148,7 @@ MixCoreEditor::MixCoreEditor(MixCoreProcessor& p) : AudioProcessorEditor(&p), pr
     addAndMakeVisible(history_);
 
     // Module pages
-    for (auto* tab : { &gainTab_, &gateTab_, &drumTab_, &eqTab_, &compTab_ })
+    for (auto* tab : { &gainTab_, &gateTab_, &drumTab_, &eqTab_, &compTab_, &satTab_ })
     {
         tab->setClickingTogglesState(true);
         tab->setRadioGroupId(4711);
@@ -166,6 +170,10 @@ MixCoreEditor::MixCoreEditor(MixCoreProcessor& p) : AudioProcessorEditor(&p), pr
     compTab_.onClick = [this] { if (compTab_.getToggleState()) setPage(Page::Comp); };
     addChildComponent(compPanel_);
     addChildComponent(compSuggestPanel_);
+    satTab_.setTooltip("Saturation: Tape, Tube, Console or Clip colour with a harmonics preview and Listen & suggest.");
+    satTab_.onClick = [this] { if (satTab_.getToggleState()) setPage(Page::Sat); };
+    addChildComponent(satPanel_);
+    addChildComponent(satSuggestPanel_);
     debleedChip_.addMouseListener(this, false);
     addChildComponent(drumPanel_);
     addChildComponent(replacePanel_);
@@ -190,14 +198,16 @@ MixCoreEditor::MixCoreEditor(MixCoreProcessor& p) : AudioProcessorEditor(&p), pr
     drumPowerAtt_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(apvts, ids::drumOn, drumPower_);
     eqPowerAtt_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(apvts, ids::eqOn, eqPower_);
     compPowerAtt_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(apvts, ids::compOn, compPower_);
-    for (auto* b : { &gainPower_, &gatePower_, &drumPower_, &eqPower_, &compPower_ })
+    satPowerAtt_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(apvts, ids::satOn, satPower_);
+    for (auto* b : { &gainPower_, &gatePower_, &drumPower_, &eqPower_, &compPower_, &satPower_ })
         addAndMakeVisible(*b);
     offBanner_.onTurnOn = [this] {
         setParameter(page_ == Page::SmartGain ? ids::smartGainOn
                      : page_ == Page::Gate    ? ids::gateEnabled
                      : page_ == Page::Drums   ? ids::drumOn
                      : page_ == Page::Eq      ? ids::eqOn
-                                              : ids::compOn,
+                     : page_ == Page::Comp    ? ids::compOn
+                                              : ids::satOn,
                      1.0f);
     };
     addChildComponent(offBanner_);
@@ -339,6 +349,10 @@ void MixCoreEditor::setPage(Page page)
     compTab_.setToggleState(compPage, juce::dontSendNotification);
     compPanel_.setVisible(compPage);
     compSuggestPanel_.setVisible(compPage);
+    const bool satPage = page == Page::Sat;
+    satTab_.setToggleState(satPage, juce::dontSendNotification);
+    satPanel_.setVisible(satPage);
+    satSuggestPanel_.setVisible(satPage);
     gainTab_.setToggleState(gainPage, juce::dontSendNotification);
     gateTab_.setToggleState(gatePage, juce::dontSendNotification);
     drumTab_.setToggleState(drumPage, juce::dontSendNotification);
@@ -426,7 +440,7 @@ void MixCoreEditor::paint(juce::Graphics& g)
     if (telemetry_.sampleRate > 0.0)
     {
         g.setFont(theme::font(11.0f));
-        const int latency = telemetry_.latencySamples + gateTelemetry_.latencySamples;
+        const int latency = processor_.getLatencySamples(); // whole strip, as reported to the host
         g.drawText(juce::String(telemetry_.sampleRate / 1000.0, 1) + " kHz  |  latency " + juce::String(latency) + " smp",
                    statusTextArea(), juce::Justification::centredRight);
     }
@@ -448,14 +462,15 @@ void MixCoreEditor::paint(juce::Graphics& g)
     chipLabel("GATE", gateChip_, gateOn_);
     chipLabel("EQ", eqChip_, eqOn_);
     chipLabel("COMP", compChip_, compOn_);
+    chipLabel("SAT", satChip_, satOn_);
     g.setColour(theme::label);
-    g.drawText(page_ == Page::Gate ? "GATE THRESHOLD" : page_ == Page::Drums ? (replaceViewShown_ ? "REPLACE" : "DE-BLEED") : page_ == Page::Eq ? "EQ COACH" : page_ == Page::Comp ? "COMP COACH" : "CALIBRATION", juce::Rectangle<int>(getWidth() - 340, 66, 200, 16),
+    g.drawText(page_ == Page::Gate ? "GATE THRESHOLD" : page_ == Page::Drums ? (replaceViewShown_ ? "REPLACE" : "DE-BLEED") : page_ == Page::Eq ? "EQ COACH" : page_ == Page::Comp ? "COMP COACH" : page_ == Page::Sat ? "SAT COACH" : "CALIBRATION", juce::Rectangle<int>(getWidth() - 340, 66, 200, 16),
                juce::Justification::centredLeft);
     g.drawText("MIX COACH", coachText_.getBounds().translated(0, -20).withHeight(16), juce::Justification::centredLeft);
 
     // Signal-flow arrows between the chips.
     g.setColour(theme::muted);
-    for (auto* c : { &staticChip_, &riderChip_, &guardChip_, &debleedChip_, &gateChip_, &eqChip_ })
+    for (auto* c : { &staticChip_, &riderChip_, &guardChip_, &debleedChip_, &gateChip_, &eqChip_, &compChip_ })
     {
         const auto r = c->getBounds();
         g.drawArrow(juce::Line<float>(static_cast<float>(r.getRight() + 2), static_cast<float>(r.getCentreY()),
@@ -496,7 +511,8 @@ void MixCoreEditor::resized()
     // Right: calibration + coach
     auto right = area.removeFromRight(340).reduced(12, 8);
     right.removeFromTop(22);
-    auto cal = right.removeFromTop(page_ == Page::Eq || page_ == Page::Comp ? 330 : 220);
+    auto cal = right.removeFromTop(page_ == Page::Eq || page_ == Page::Comp || page_ == Page::Sat ? 330 : 220);
+    satSuggestPanel_.setBounds(cal);
     eqSuggestPanel_.setBounds(cal);
     compSuggestPanel_.setBounds(cal);
     gateLearnPanel_.setBounds(cal);
@@ -521,17 +537,20 @@ void MixCoreEditor::resized()
     auto tabs = centre.removeFromTop(26);
     {
         // Power button + tab per module; tab widths share what is left, weighted by their text.
-        const std::array<std::pair<PowerButton*, juce::TextButton*>, 5> mods { { { &gainPower_, &gainTab_ }, { &gatePower_, &gateTab_ },
+        const std::array<std::pair<PowerButton*, juce::TextButton*>, 6> mods { { { &gainPower_, &gainTab_ }, { &gatePower_, &gateTab_ },
                                                                                  { &drumPower_, &drumTab_ }, { &eqPower_, &eqTab_ },
-                                                                                 { &compPower_, &compTab_ } } };
-        constexpr int power = 24, gap = 6;
-        const float weights[] = { 1.6f, 0.9f, 1.05f, 0.75f, 1.0f };
-        const int free = tabs.getWidth() - 5 * (power + 2) - 4 * gap;
+                                                                                 { &compPower_, &compTab_ }, { &satPower_, &satTab_ } } };
+        constexpr int power = 24, gap = 5;
+        const float weights[] = { 1.6f, 0.9f, 1.05f, 0.75f, 1.0f, 0.85f };
+        float total = 0.0f;
+        for (float w : weights)
+            total += w;
+        const int free = tabs.getWidth() - 6 * (power + 2) - 5 * gap;
         for (size_t i = 0; i < mods.size(); ++i)
         {
             mods[i].first->setBounds(tabs.removeFromLeft(power));
             tabs.removeFromLeft(2);
-            mods[i].second->setBounds(tabs.removeFromLeft(juce::roundToInt(static_cast<float>(free) * weights[i] / 5.3f)));
+            mods[i].second->setBounds(tabs.removeFromLeft(juce::roundToInt(static_cast<float>(free) * weights[i] / total)));
             tabs.removeFromLeft(gap);
         }
     }
@@ -539,21 +558,22 @@ void MixCoreEditor::resized()
     activityLabel_.setBounds(centre.removeFromTop(20));
     centre.removeFromTop(16);
     auto chips = centre.removeFromTop(36);
-    constexpr int gap = 10;
-    const int chipW = (chips.getWidth() - 6 * gap) / 7;
-    for (auto* chip : { &staticChip_, &riderChip_, &guardChip_, &debleedChip_, &gateChip_, &eqChip_ })
+    constexpr int gap = 9;
+    const int chipW = (chips.getWidth() - 7 * gap) / 8;
+    for (auto* chip : { &staticChip_, &riderChip_, &guardChip_, &debleedChip_, &gateChip_, &eqChip_, &compChip_ })
     {
         chip->setBounds(chips.removeFromLeft(chipW));
         chips.removeFromLeft(gap);
     }
-    compChip_.setBounds(chips);
+    satChip_.setBounds(chips);
     centre.removeFromTop(10);
 
     gatePanel_.setBounds(centre);
     eqPanel_.setBounds(centre);
     compPanel_.setBounds(centre);
+    satPanel_.setBounds(centre);
     offBanner_.setBounds(centre.withHeight(54));
-    if (page_ == Page::Eq || page_ == Page::Comp)
+    if (page_ == Page::Eq || page_ == Page::Comp || page_ == Page::Sat)
         offBanner_.setBounds(centre.withTrimmedTop(34).withHeight(54)); // below the profile / EQ ON row
     {
         auto drums = centre;
@@ -646,8 +666,9 @@ void MixCoreEditor::updateModuleStates(bool force)
     drumOn_ = c.drum.moduleOn;
     eqOn_ = c.eq.enabled;
     compOn_ = c.comp.enabled;
-    const int key = (gainOn_ ? 1 : 0) | (gateOn_ ? 2 : 0) | (drumOn_ ? 4 : 0) | (eqOn_ ? 8 : 0) | (compOn_ ? 16 : 0)
-                    | (static_cast<int>(page_) << 5) | (advanced_ ? 1024 : 0);
+    satOn_ = c.sat.enabled;
+    const int key = (gainOn_ ? 1 : 0) | (gateOn_ ? 2 : 0) | (drumOn_ ? 4 : 0) | (eqOn_ ? 8 : 0) | (compOn_ ? 16 : 0) | (satOn_ ? 32 : 0)
+                    | (static_cast<int>(page_) << 6) | (advanced_ ? 2048 : 0);
     if (!force && key == lastModuleKey_)
         return;
     lastModuleKey_ = key;
@@ -675,6 +696,8 @@ void MixCoreEditor::updateModuleStates(bool force)
     eqTab_.setColour(juce::TextButton::textColourOffId, eqOn_ ? theme::text : theme::muted.withAlpha(0.6f));
     compTab_.setColour(juce::TextButton::textColourOffId, compOn_ ? theme::text : theme::muted.withAlpha(0.6f));
     compPanel_.setAlpha(compOn_ ? 1.0f : 0.6f);
+    satTab_.setColour(juce::TextButton::textColourOffId, satOn_ ? theme::text : theme::muted.withAlpha(0.6f));
+    satPanel_.setAlpha(satOn_ ? 1.0f : 0.6f);
 
     gainTab_.setColour(juce::TextButton::textColourOffId, gainOn_ ? theme::text : theme::muted.withAlpha(0.6f));
     gateTab_.setColour(juce::TextButton::textColourOffId, gateOn_ ? theme::text : theme::muted.withAlpha(0.6f));
@@ -682,8 +705,8 @@ void MixCoreEditor::updateModuleStates(bool force)
 
     const bool pageOff = (page_ == Page::SmartGain && !gainOn_) || (page_ == Page::Gate && !gateOn_)
                          || (page_ == Page::Drums && !drumOn_) || (page_ == Page::Eq && !eqOn_)
-                         || (page_ == Page::Comp && !compOn_);
-    offBanner_.setModule(page_ == Page::SmartGain ? "Smart Gain" : page_ == Page::Gate ? "Gate" : page_ == Page::Drums ? "Drums" : page_ == Page::Eq ? "EQ" : "Compressor");
+                         || (page_ == Page::Comp && !compOn_) || (page_ == Page::Sat && !satOn_);
+    offBanner_.setModule(page_ == Page::SmartGain ? "Smart Gain" : page_ == Page::Gate ? "Gate" : page_ == Page::Drums ? "Drums" : page_ == Page::Eq ? "EQ" : page_ == Page::Comp ? "Compressor" : "Saturation");
     offBanner_.setVisible(pageOff);
     if (pageOff)
         offBanner_.toFront(false);
@@ -746,6 +769,12 @@ void MixCoreEditor::refresh()
     {
         compPanel_.update(compTelemetry_, compFresh);
         compSuggestPanel_.update();
+    }
+    const bool satFresh = processor_.readSatTelemetry(satTelemetry_);
+    if (page_ == Page::Sat)
+    {
+        satPanel_.update(satTelemetry_, satFresh);
+        satSuggestPanel_.update();
     }
 
     if (!gt.enabled)
@@ -813,6 +842,16 @@ void MixCoreEditor::refresh()
         compChip_.setColour(juce::Label::textColourId, gr > 12.0f ? theme::warning : theme::ice);
     }
     setChipOff(compChip_, !compOn_, theme::ice);
+    if (satOn_)
+    {
+        const float sd = satTelemetry_.saturationDb;
+        const double pct = 100.0 * std::pow(10.0, static_cast<double>(sd) / 20.0);
+        satChip_.setText(sd < -60.0f ? juce::String("clean")
+                                     : (pct < 10.0 ? juce::String(pct, 1) : juce::String(juce::roundToInt(pct))) + " %",
+                         juce::dontSendNotification);
+        satChip_.setColour(juce::Label::textColourId, sd > -20.0f ? theme::warning : theme::ice);
+    }
+    setChipOff(satChip_, !satOn_, theme::ice);
 
     if (page_ == Page::SmartGain)
         updateCalibrationUi();

@@ -13,14 +13,14 @@ Timing-sensitive suites (`realtime`, `performance`) are marked `RUN_SERIAL`.
 
 ## Latest recorded run
 
-* **Date:** 2026-10-31 · **Commit:** see `git log` · **Machine:** Linux x86_64 dev
+* **Date:** 2026-11-01 · **Commit:** see `git log` · **Machine:** Linux x86_64 dev
   container, 2 vCPU Intel Xeon @ 2.10 GHz, GCC 13.3, JUCE 8.0.4, Catch2 3.7.1.
-* **Result: 161 / 161 CTest tests passed** (after the compressor; 140 / 140 after the parametric EQ; 122 / 122 after the Mix control; 121 / 121 after drum replacement; 101 / 101 after module power + source type; 93 / 93 after the VineAudio rebrand; 90 / 90 after drum de-bleed; 74 / 74 after the gate, 48 / 48 with presets, 37 / 37 before), and
+* **Result: 178 / 178 CTest tests passed** (after saturation; 161 / 161 after the compressor; 140 / 140 after the parametric EQ; 122 / 122 after the Mix control; 121 / 121 after drum replacement; 101 / 101 after module power + source type; 93 / 93 after the VineAudio rebrand; 90 / 90 after drum de-bleed; 74 / 74 after the gate, 48 / 48 with presets, 37 / 37 before), and
   again from a **fresh clone configured exactly like the Linux CI job**
   (JUCE/Catch2 fetched from GitHub, engine `-Werror`).
 * Engine + tests also built with **Clang 18 / libc++ with `-Werror`**: all
-  118 engine tests pass; Clang plugin build: 161 / 161.
-* **AddressSanitizer + UBSan:** 118 / 118 clean. **ThreadSanitizer:** all
+  129 engine tests pass; Clang plugin build: 178 / 178.
+* **AddressSanitizer + UBSan:** 129 / 129 clean. **ThreadSanitizer:** all
   realtime/thread tests clean (the 10-minute performance test is too slow
   under TSan's instrumentation and is only meaningful in Release).
 * Timing note: the realtime block-time test fails if another build is using
@@ -188,6 +188,23 @@ listening tests are required.
 | Strip | runs after the EQ (EQ boost drives it), no latency added | pass |
 | Realtime | strip no-allocation test toggles the compressor, detector, auto modes, attack, HPF, mix | pass |
 | Plugin | parameters match the engine ("20:1 (limit)", "Hard" knee); reduction measured through `processBlock` with unchanged latency; profiles; Listen & suggest changes nothing until Apply, Apply changes only its own values and combines; preset v6 round-trip, v5 loads with it off; Comp page renders | pass |
+
+## Saturation tests
+
+| Requirement | Test | Result |
+|---|---|---|
+| Settings | defaults, clamping (incl. NaN), round-trip, bad values ignored | pass |
+| Curves | slope 1 at zero, monotonic, bounded (all four); Tape: no 2nd harmonic; Tube: 2nd > −30 dB; Clip clean below full scale; more drive = more harmonics; drive solver inverts THD | pass |
+| Measured harmonics | 1 kHz at −12 dBFS, 12 dB drive: H2/H3 through the DSP match the curve analysis within 1 dB (Tape, Tube, Console) | pass |
+| Off / Mix 0 % | bit-exact; quiet sine with 6 dB drive is exactly 6 dB louder and clean | pass |
+| Studio | latency 28; output = input delayed 28 samples (< 1 % error); 15 kHz within 0.5 dB; aliasing of a 7 kHz tone clipped 24 dB: Live −10 dB, Studio −39 dB (≥ 12 dB better required) | pass |
+| Auto gain | 24 dB Tape drive on noise phrases stays within 1.5 dB; without it > 6 dB louder; output gain exact | pass |
+| Switching | on/off and Mix changes never step more than the saturated signal itself (found and fixed: a loudness bump while auto gain filled its averages — now a fast start); Live ↔ Studio while on stays finite and bounded | pass |
+| Blocks / stereo / extremes / telemetry | 64 vs 997 blocks identical in both qualities; identical channels stay identical; all types at 36 dB drive + 12 dB output finite; saturation amount rises with drive; one tap entry per 10 ms | pass |
+| Coach | vocal drive gives the vocal target within 1 dB, vocal wording; drums get more drive; Clip on speech → Tape suggestion; heavy Live → Studio suggestion and "distorted" wording; no data → no suggestions | pass |
+| Profiles / strip | 8 valid profiles; channel presets carry their profile with saturation off; Studio adds 28 samples only while on | pass |
+| Realtime | strip no-allocation test toggles saturation, Live/Studio, type, drive, auto gain | pass |
+| Plugin | params (quality not automatable), latency 0 → 28 → 0; predicted 2nd harmonic through `processBlock`; profiles keep the quality; Listen & suggest changes nothing until Apply; preset v7 round-trip, v6 loads with it off; Sat page renders | pass |
 
 ## Plugin adapter tests
 

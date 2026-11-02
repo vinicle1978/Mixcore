@@ -7,6 +7,8 @@
 
 #include "mixcore/comp/CompProfiles.h"
 #include "mixcore/drum/DrumProfiles.h"
+#include "mixcore/sat/SatCurves.h"
+#include "mixcore/sat/SatProfiles.h"
 #include "mixcore/gain/SmartGainPresets.h"
 
 #include <catch2/catch_approx.hpp>
@@ -670,7 +672,7 @@ TEST_CASE("User presets include de-bleed; older presets load with it off", "[plu
     setParam(p, ids::drumDebleedLength, 220.0f);
     REQUIRE(p.saveUserPreset("Church Snare").isEmpty());
     const auto text = temp.dir.getChildFile("Church Snare.mixpreset").loadFileAsString();
-    CHECK(text.contains("version=\"6\""));
+    CHECK(text.contains("version=\"7\""));
     CHECK(text.contains("<Drum>"));
 
     MixCoreProcessor q;
@@ -802,7 +804,7 @@ TEST_CASE("User presets keep source type and module power; older files default t
     setParam(p, ids::smartGainOn, 0.0f);
     REQUIRE(p.saveUserPreset("Snare no gain").isEmpty());
     const auto text = temp.dir.getChildFile("Snare no gain.mixpreset").loadFileAsString();
-    CHECK(text.contains("version=\"6\""));
+    CHECK(text.contains("version=\"7\""));
     CHECK(text.contains("source=\"Drum\""));
 
     MixCoreProcessor q;
@@ -1206,7 +1208,7 @@ TEST_CASE("User presets include the EQ; older presets load with it off", "[plugi
     setParam(p, eqParamId(4, EqField::Gain).toRawUTF8(), 3.5f);
     REQUIRE(p.saveUserPreset("Pastor").isEmpty());
     const auto text = temp.dir.getChildFile("Pastor.mixpreset").loadFileAsString();
-    CHECK(text.contains("version=\"6\""));
+    CHECK(text.contains("version=\"7\""));
     CHECK(text.contains("<Eq>"));
 
     MixCoreProcessor q;
@@ -1414,7 +1416,7 @@ TEST_CASE("User presets include the compressor; older presets load with it off",
     setParam(p, ids::compMix, 70.0f);
     REQUIRE(p.saveUserPreset("Announcements").isEmpty());
     const auto text = temp.dir.getChildFile("Announcements.mixpreset").loadFileAsString();
-    CHECK(text.contains("version=\"6\""));
+    CHECK(text.contains("version=\"7\""));
     CHECK(text.contains("<Comp>"));
 
     MixCoreProcessor q;
@@ -1478,6 +1480,195 @@ TEST_CASE("Comp page renders", "[plugin][comp][editor]")
     if (const char* outDir = std::getenv("MIXCORE_SNAPSHOT_DIR"))
     {
         juce::File f(juce::String(outDir) + "/mixcore-comp.png");
+        f.deleteFile();
+        juce::FileOutputStream stream(f);
+        juce::PNGImageFormat().writeImageToStream(image, stream);
+    }
+}
+
+// ------------------------------------------------------------- Saturation
+
+TEST_CASE("Saturation parameters: off by default; Studio adds 28 samples latency only while on", "[plugin][sat][params]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    const auto s = p.currentChannelSettings().sat;
+    CHECK_FALSE(s.enabled);
+    const auto* prof = sat::findSatProfile("Vocal Warmth"); // first preset is a lead vocal
+    REQUIRE(prof != nullptr);
+    auto expected = prof->settings;
+    expected.enabled = false;
+    CHECK(sat::approximatelyEqual(s, expected, 1e-3f));
+    CHECK_FALSE(p.isPresetModified());
+    CHECK_FALSE(p.state().getParameter(ids::satQuality)->isAutomatable());
+
+    p.setPlayConfigDetails(1, 1, 48000.0, 480);
+    p.prepareToPlay(48000.0, 480);
+    juce::AudioBuffer<float> block(1, 480);
+    juce::MidiBuffer midi;
+    const auto settle = [&] {
+        block.clear();
+        p.processBlock(block, midi);
+        p.prepareToPlay(48000.0, 480); // reports the current latency (the timer does the same while running)
+    };
+    settle();
+    const int base = p.getLatencySamples();
+    setParam(p, ids::satQuality, 1.0f);
+    settle();
+    CHECK(p.getLatencySamples() == base); // Studio, but off
+    setParam(p, ids::satOn, 1.0f);
+    settle();
+    CHECK(p.getLatencySamples() == base + 28);
+    setParam(p, ids::satQuality, 0.0f);
+    settle();
+    CHECK(p.getLatencySamples() == base);
+}
+
+TEST_CASE("Saturation adds the predicted harmonics in the plugin", "[plugin][sat][audio]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    setParam(p, ids::smartGainOn, 0.0f);
+    setParam(p, ids::satOn, 1.0f);
+    setParam(p, ids::satType, 1.0f); // Tube
+    setParam(p, ids::satDrive, 12.0f);
+    setParam(p, ids::satAutoGain, 0.0f);
+    setParam(p, ids::satMix, 100.0f);
+    p.setPlayConfigDetails(1, 1, 48000.0, 480);
+    p.prepareToPlay(48000.0, 480);
+    juce::AudioBuffer<float> block(1, 480), all(1, 48000);
+    juce::MidiBuffer midi;
+    const double amp = std::pow(10.0, -12.0 / 20.0);
+    for (int b = 0; b < 100; ++b)
+    {
+        for (int i = 0; i < 480; ++i)
+            block.setSample(0, i, static_cast<float>(amp * std::sin(2.0 * juce::MathConstants<double>::pi * 1000.0 * (b * 480 + i) / 48000.0)));
+        p.processBlock(block, midi);
+        all.copyFrom(0, b * 480, block, 0, 0, 480);
+    }
+    const auto amplitude = [&](double f) {
+        double re = 0.0, im = 0.0;
+        for (int i = 24000; i < 48000; ++i)
+        {
+            const double ph = 2.0 * juce::MathConstants<double>::pi * f * i / 48000.0;
+            re += all.getSample(0, i) * std::cos(ph);
+            im += all.getSample(0, i) * std::sin(ph);
+        }
+        return std::sqrt(re * re + im * im);
+    };
+    const double h2 = 20.0 * std::log10(amplitude(2000.0) / amplitude(1000.0));
+    CHECK(h2 == Approx(sat::harmonicsDb(sat::SatType::Tube, -12.0f, 12.0f)[0]).margin(1.0));
+    sat::SatTelemetry t;
+    REQUIRE(p.readSatTelemetry(t));
+    CHECK(t.enabled);
+    CHECK(t.saturationDb > -40.0f);
+}
+
+TEST_CASE("Saturation profiles keep the Live/Studio choice", "[plugin][sat][profiles]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    setParam(p, ids::satQuality, 1.0f);
+    REQUIRE(p.loadSatProfile("Kick Weight"));
+    const auto s = p.currentChannelSettings().sat;
+    CHECK(s.enabled);
+    CHECK(s.type == sat::SatType::Tube);
+    CHECK(s.driveDb == Approx(9.0f).margin(0.05));
+    CHECK(s.quality == sat::SatQuality::Studio);
+    CHECK_FALSE(p.loadSatProfile("Nope"));
+}
+
+TEST_CASE("Sat Listen & suggest changes nothing until applied", "[plugin][sat][coach]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    setParam(p, ids::smartGainOn, 0.0f);
+    p.setPlayConfigDetails(1, 1, 48000.0, 480);
+    p.prepareToPlay(48000.0, 480);
+    const auto before = p.currentChannelSettings().sat;
+    p.startSatListen(2.0);
+    juce::AudioBuffer<float> block(1, 480);
+    juce::MidiBuffer midi;
+    for (int b = 0; b < 1000 && p.satListening(); ++b)
+    {
+        for (int i = 0; i < 480; ++i)
+            block.setSample(0, i, 0.4f * static_cast<float>(std::sin(2.0 * juce::MathConstants<double>::pi * 220.0 * (b * 480 + i) / 48000.0)));
+        p.processBlock(block, midi);
+        p.pumpSatListener();
+    }
+    REQUIRE(p.satListenReady());
+    const auto sugg = p.satSuggestions();
+    REQUIRE_FALSE(sugg.empty());
+    CHECK(sat::approximatelyEqual(p.currentChannelSettings().sat, before, 1e-4f));
+    CHECK(p.satListenStats().loudDb == Approx(gainToDb(0.4f)).margin(0.5));
+    p.applySatSuggestion(sugg.front());
+    const auto now = p.currentChannelSettings().sat;
+    CHECK(now.enabled);
+    CHECK(now.driveDb == Approx(sugg.front().settings.driveDb).margin(0.05));
+    CHECK(now.type == before.type);
+}
+
+TEST_CASE("User presets include saturation; older presets load with it off", "[plugin][sat][presets]")
+{
+    JuceEnv env;
+    TempPresetDir temp;
+    MixCoreProcessor p;
+    p.setPresetDirectory(temp.dir);
+    REQUIRE(p.loadSatProfile("Snare Crack"));
+    setParam(p, ids::satDrive, 11.5f);
+    REQUIRE(p.saveUserPreset("Crack").isEmpty());
+    const auto text = temp.dir.getChildFile("Crack.mixpreset").loadFileAsString();
+    CHECK(text.contains("version=\"7\""));
+    CHECK(text.contains("<Sat>"));
+    MixCoreProcessor q;
+    q.setPresetDirectory(temp.dir);
+    REQUIRE(q.loadUserPreset("Crack"));
+    CHECK(q.currentChannelSettings().sat.enabled);
+    CHECK(q.currentChannelSettings().sat.type == sat::SatType::Clip);
+    CHECK(q.currentChannelSettings().sat.driveDb == Approx(11.5f).margin(0.05));
+    CHECK_FALSE(q.isPresetModified());
+    temp.dir.getChildFile("Old6.mixpreset")
+        .replaceWithText("<?xml version=\"1.0\"?><MixCorePreset version=\"6\" module=\"SmartGain\" name=\"Old6\">"
+                         "<Settings>targetRmsDb=-20;</Settings></MixCorePreset>");
+    REQUIRE(q.loadUserPreset("Old6"));
+    CHECK_FALSE(q.currentChannelSettings().sat.enabled);
+}
+
+TEST_CASE("Sat page renders", "[plugin][sat][editor]")
+{
+    JuceEnv env;
+    MixCoreProcessor p;
+    p.loadFactoryPreset("Kick Drum");
+    REQUIRE(p.loadSatProfile("Kick Weight"));
+    p.setPlayConfigDetails(1, 1, 48000.0, 480);
+    p.prepareToPlay(48000.0, 480);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
+    auto& ed = dynamic_cast<MixCoreEditor&>(*editor);
+    ed.setPage(MixCoreEditor::Page::Sat);
+    p.startSatListen(3.0);
+    juce::AudioBuffer<float> block(1, 480);
+    juce::MidiBuffer midi;
+    for (int b = 0; b < 500; ++b)
+    {
+        for (int i = 0; i < 480; ++i)
+        {
+            const int n = b * 480 + i;
+            const float t = static_cast<float>(n % 24000) / 48000.0f;
+            const float f = 50.0f + 90.0f * std::exp(-t / 0.03f);
+            block.setSample(0, i, 0.7f * std::exp(-t / 0.25f) * std::sin(2.0f * 3.14159265f * f * t));
+        }
+        p.processBlock(block, midi);
+        p.pumpSatListener();
+        if (b % 3 == 0)
+            ed.refresh();
+    }
+    for (int k = 0; k < 12; ++k)
+        ed.refresh();
+    const auto image = ed.createComponentSnapshot(ed.getLocalBounds(), true, 1.0f);
+    CHECK(image.getWidth() == ed.getWidth());
+    if (const char* outDir = std::getenv("MIXCORE_SNAPSHOT_DIR"))
+    {
+        juce::File f(juce::String(outDir) + "/mixcore-sat.png");
         f.deleteFile();
         juce::FileOutputStream stream(f);
         juce::PNGImageFormat().writeImageToStream(image, stream);

@@ -36,6 +36,7 @@ target_sources(MixCore PRIVATE
     Source/ui/ReplacePanel.cpp
     Source/ui/EqPanel.cpp
     Source/ui/CompPanel.cpp
+    Source/ui/SatPanel.cpp
     Source/ui/Theme.cpp)
 
 target_include_directories(MixCore PRIVATE Source)

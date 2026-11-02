@@ -57,6 +57,13 @@ inline constexpr const char* gateLookahead = "gateLookahead";
 inline constexpr const char* smartGainOn = "smartGainOn";
 inline constexpr const char* sourceType = "sourceType";
 
+inline constexpr const char* satOn = "satOn";
+inline constexpr const char* satType = "satType";
+inline constexpr const char* satDrive = "satDrive";
+inline constexpr const char* satMix = "satMix";
+inline constexpr const char* satOutput = "satOutput";
+inline constexpr const char* satAutoGain = "satAutoGain";
+inline constexpr const char* satQuality = "satQuality";
 inline constexpr const char* compOn = "compOn";
 inline constexpr const char* compThreshold = "compThreshold";
 inline constexpr const char* compRatio = "compRatio";
@@ -168,8 +175,10 @@ public:
         c.drum = readDrum();
         c.eq = readEq();
         c.comp = readComp();
+        c.sat = readSat();
         return c;
     }
+    sat::SatSettings readSat() const noexcept;
     eq::EqSettings readEq() const noexcept;
     comp::CompSettings readComp() const noexcept;
 
@@ -195,6 +204,11 @@ private:
         *autoRelease = nullptr, *makeup = nullptr, *autoMakeup = nullptr, *mix = nullptr, *hpfOn = nullptr, *hpf = nullptr,
         *detector = nullptr;
     } comp_;
+    struct SatRaw
+    {
+        std::atomic<float>*on = nullptr, *type = nullptr, *drive = nullptr, *mix = nullptr, *output = nullptr, *autoGain = nullptr,
+        *quality = nullptr;
+    } sat_;
     std::atomic<float>* gainOn_ = nullptr;
     std::atomic<float>* source_ = nullptr;
     std::vector<std::pair<std::atomic<float>*, float drum::DrumSettings::*>> drumFloats_;

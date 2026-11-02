@@ -128,6 +128,22 @@ button or **COMP ON**.
   (and, when useful, an attack time), with the reason. **Nothing changes until
   you press Apply.**
 
+## 8e. Saturation (optional)
+
+The **Sat** tab adds harmonic colour. Switch it on with its power button or
+**SAT ON**.
+
+* Pick a type: **Tape** (smooth), **Tube** (warm, even harmonics), **Console**
+  (subtle) or **Clip** (hard, bright). **Drive** sets how much; the graph shows
+  the curve with your loudest peaks on it, and **Harmonics** shows what that
+  adds (even harmonics in blue, odd in silver).
+* **Auto gain** (on by default) keeps the level the same, so you hear colour,
+  not just volume. **Mix** below 100 % blends the clean signal back in.
+* **Live** has zero latency. **Studio** is cleaner at heavy drive but adds
+  28 samples (about 0.6 ms at 48 kHz), only while saturation is on.
+* **Load sat profile...** and **Listen & suggest** work like the other modules:
+  nothing changes until you press Apply.
+
 ## 9. Mix Coach
 
 The coach panel explains anything worth attention — what was detected, why it

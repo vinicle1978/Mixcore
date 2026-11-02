@@ -165,6 +165,13 @@ compressor switched off**. On the Comp page, **Load comp profile...** loads one
 and switches it on. User presets (format v6) save the compressor; older presets
 load with it off.
 
+## Saturation
+
+Every channel preset prepares a matching saturation starting point (Vocal
+Warmth, Speech Presence, Kick Weight, Snare Crack, Toms Body, Instrument Warmth)
+**with saturation switched off**. User presets (format v7) save saturation;
+older presets load with it off.
+
 ## Your own presets
 
 1. Set things up the way you like.

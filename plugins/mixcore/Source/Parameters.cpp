@@ -291,6 +291,31 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     }
     layout.add(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID { ids::compDetector, 1 }, "Comp Detector",
                                                             juce::StringArray { "Peak", "RMS" }, static_cast<int>(cd.detector)));
+
+    // ---- Saturation ------------------------------------------------------------
+    const sat::SatSettings sd;
+    layout.add(std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ids::satOn, 1 }, "Sat On", sd.enabled));
+    {
+        juce::StringArray types;
+        for (int t = 0; t < sat::kNumSatTypes; ++t)
+            types.add(sat::satTypeName(static_cast<sat::SatType>(t)));
+        layout.add(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID { ids::satType, 1 }, "Sat Type", types,
+                                                                static_cast<int>(sd.type)));
+    }
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ids::satDrive, 1 }, "Sat Drive", juce::NormalisableRange<float>(0.0f, 36.0f, 0.1f), sd.driveDb,
+        juce::AudioParameterFloatAttributes().withLabel("dB").withStringFromValueFunction([](float v, int) { return juce::String(v, 1) + " dB"; })));
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ids::satMix, 1 }, "Sat Mix", juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f), sd.mixPercent,
+        juce::AudioParameterFloatAttributes().withLabel("%").withStringFromValueFunction([](float v, int) { return juce::String(v, 1) + " %"; })));
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ids::satOutput, 1 }, "Sat Output", juce::NormalisableRange<float>(-24.0f, 12.0f, 0.1f), sd.outputDb,
+        juce::AudioParameterFloatAttributes().withLabel("dB").withStringFromValueFunction(dbText)));
+    layout.add(std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ids::satAutoGain, 1 }, "Sat Auto Gain", sd.autoGain));
+    // Quality changes latency: a setting, not automation.
+    layout.add(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID { ids::satQuality, 1 }, "Sat Quality",
+                                                            juce::StringArray { "Live", "Studio" }, static_cast<int>(sd.quality),
+                                                            juce::AudioParameterChoiceAttributes().withAutomatable(false)));
     return layout;
 }
 
@@ -318,6 +343,14 @@ ParameterReader::ParameterReader(juce::AudioProcessorValueTreeState& state)
     comp_.hpf = state.getRawParameterValue(ids::compScHpf);
     comp_.detector = state.getRawParameterValue(ids::compDetector);
     jassert(comp_.detector != nullptr && comp_.on != nullptr);
+    sat_.on = state.getRawParameterValue(ids::satOn);
+    sat_.type = state.getRawParameterValue(ids::satType);
+    sat_.drive = state.getRawParameterValue(ids::satDrive);
+    sat_.mix = state.getRawParameterValue(ids::satMix);
+    sat_.output = state.getRawParameterValue(ids::satOutput);
+    sat_.autoGain = state.getRawParameterValue(ids::satAutoGain);
+    sat_.quality = state.getRawParameterValue(ids::satQuality);
+    jassert(sat_.quality != nullptr && sat_.on != nullptr);
     for (int b = 0; b < eq::kNumBands; ++b)
     {
         auto& r = eqBands_[static_cast<size_t>(b)];
@@ -411,6 +444,20 @@ comp::CompSettings ParameterReader::readComp() const noexcept
     c.scHpfHz = ld(comp_.hpf);
     c.detector = ld(comp_.detector) >= 0.5f ? comp::Detector::Rms : comp::Detector::Peak;
     return c;
+}
+
+sat::SatSettings ParameterReader::readSat() const noexcept
+{
+    const auto ld = [](const std::atomic<float>* a) { return a->load(std::memory_order_relaxed); };
+    sat::SatSettings s;
+    s.enabled = ld(sat_.on) >= 0.5f;
+    s.type = static_cast<sat::SatType>(juce::jlimit(0, sat::kNumSatTypes - 1, static_cast<int>(ld(sat_.type) + 0.5f)));
+    s.driveDb = ld(sat_.drive);
+    s.mixPercent = ld(sat_.mix);
+    s.outputDb = ld(sat_.output);
+    s.autoGain = ld(sat_.autoGain) >= 0.5f;
+    s.quality = ld(sat_.quality) >= 0.5f ? sat::SatQuality::Studio : sat::SatQuality::Live;
+    return s;
 }
 
 } // namespace mixcore::plugin

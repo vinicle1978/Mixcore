@@ -5,7 +5,7 @@ namespace mixcore::plugin {
 namespace {
 constexpr const char* kRootTag = "MixCorePreset";
 constexpr const char* kModule = "SmartGain";
-constexpr int kFormatVersion = 6; // v5: <Eq>, v6: <Comp>
+constexpr int kFormatVersion = 7; // v5: <Eq>, v6: <Comp>, v7: <Sat>
 } // namespace
 
 PresetManager::PresetManager() : PresetManager(defaultDirectory())
@@ -95,6 +95,10 @@ std::optional<UserPreset> PresetManager::read(const juce::File& file)
         p.settings.comp = comp::CompSettings::deserialise(c->getAllSubText().trim().toStdString());
     else
         p.settings.comp = comp::CompSettings {}; // v1-v5 file: compressor off
+    if (const auto* sx = xml->getChildByName("Sat"))
+        p.settings.sat = sat::SatSettings::deserialise(sx->getAllSubText().trim().toStdString());
+    else
+        p.settings.sat = sat::SatSettings {}; // v1-v6 file: saturation off
     return p; // deserialise() already validated every value
 }
 
@@ -146,6 +150,8 @@ juce::String PresetManager::save(const juce::String& name, const strip::ChannelS
     e->addTextElement(juce::String(settings.eq.serialise()));
     auto* c = root.createNewChildElement("Comp");
     c->addTextElement(juce::String(settings.comp.serialise()));
+    auto* sx = root.createNewChildElement("Sat");
+    sx->addTextElement(juce::String(settings.sat.serialise()));
 
     // Write to a temporary file then move it into place, so a crash never
     // leaves a half-written preset.
