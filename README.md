@@ -55,13 +55,18 @@ Stage**.
   profiles, and **Listen & suggest** (threshold/ratio/makeup and attack from
   measured levels; applied only when you press Apply).
   [Compressor spec](docs/dsp/compressor.md)
-* **Module power**: each module (Smart Gain, Gate, Drums, EQ, Comp) has its own on/off;
+* **Saturation** (new, Sat tab): Tape, Tube, Console and Clip curves, Drive,
+  parallel Mix, auto gain, **Live** (zero latency) or **Studio** (4x
+  oversampled, 28 samples), curve and harmonics preview, source profiles, and
+  **Listen & suggest** (drive for a typical amount of harmonics; applied only
+  when you press Apply). [Saturation spec](docs/dsp/saturation.md)
+* **Module power**: each module (Smart Gain, Gate, Drums, EQ, Comp, Sat) has its own on/off;
   only Smart Gain is on by default.
 * **MixCore plugin + standalone app** (JUCE 8): VST3, AU (macOS), Standalone,
   with host parameters, state save/restore, host bypass, latency reporting and
   an editor showing live meters, gain chain, 20 s rider history, calibration
   and Mix Coach.
-* **161 automated tests** (unit, integration, regression, realtime, performance,
+* **178 automated tests** (unit, integration, regression, realtime, performance,
   plugin) — all passing on Linux; engine also passes under Clang/libc++
   `-Werror`, ASan/UBSan and TSan. Details: [`docs/testing/test-plan.md`](docs/testing/test-plan.md).
 
@@ -73,7 +78,7 @@ Stage**.
 * Not validated in DAWs, with `pluginval`/`auval`, or with real interfaces.
 * Installers (.pkg with AU/VST3/app, Windows .exe) are built by
   [`build.yml`](.github/workflows/build.yml) but **not yet run**; not Developer-ID signed or notarised.
-* Milestones 2 and 4–8: multi-channel engine and routing, saturation,
+* Milestones 2 and 5–8: multi-channel engine and routing,
   channel registry and recommendations, master bus and loudness,
   LiveMixing/LiveStreaming workflows, standalone mixer. See the roadmap below.
 
@@ -156,7 +161,7 @@ docs/              architecture, DSP spec, testing, user guide
 1. ~~Repository & architecture~~ ✔
 2. Audio foundation: multi-channel engine, channel state, routing — *partly (meters, realtime checks)*
 3. ~~Smart Gain Stage~~ ✔ (pending listening tests)
-4. ~~Gate/expander~~ ✔, ~~drum de-bleed~~ ✔, ~~drum replacement~~ ✔, ~~parametric EQ~~ ✔, ~~compressor~~ ✔ (pending listening tests), saturation
+4. ~~Gate/expander~~ ✔, ~~drum de-bleed~~ ✔, ~~drum replacement~~ ✔, ~~parametric EQ~~ ✔, ~~compressor~~ ✔, ~~saturation~~ ✔ (pending listening tests)
 5. Channel registry, shared analysis, recommendations (preview/apply/undo)
 6. Master bus, loudness & true peak, tonal analysis, LiveMixing / LiveStreaming
 7. Standalone live mixer: strips, buses, scenes, Mix Coach, setup wizard

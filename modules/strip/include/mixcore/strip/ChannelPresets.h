@@ -25,6 +25,7 @@ struct ChannelPreset
     std::string kit;         ///< Starter kit for drum replacement ("" = keep the current kit).
     std::string eqProfile;   ///< EQ profile loaded (EQ stays off).
     std::string compProfile; ///< Compressor profile loaded (compressor stays off).
+    std::string satProfile;  ///< Saturation profile loaded (saturation stays off).
     ChannelSettings settings;
 };
 

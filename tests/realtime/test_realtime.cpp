@@ -141,6 +141,7 @@ TEST_CASE("The full channel strip (Smart Gain + De-bleed + Gate) never allocates
     mixcore::drum::DeBleedTelemetry dt;
     mixcore::drum::ReplaceTelemetry rt;
     mixcore::comp::CompTelemetry ct;
+    mixcore::sat::SatTelemetry sst;
     SmartGainTelemetry st;
     std::size_t allocations = 0, frees = 0;
     int block = 0;
@@ -172,6 +173,11 @@ TEST_CASE("The full channel strip (Smart Gain + De-bleed + Gate) never allocates
         s.comp.autoMakeup = (block / 59) % 2 == 0;
         s.comp.detector = (block / 23) % 2 ? mixcore::comp::Detector::Peak : mixcore::comp::Detector::Rms;
         s.comp.mixPercent = static_cast<float>(block % 5) * 25.0f;
+        s.sat.enabled = (block / 41) % 3 != 0;                            // saturation on/off
+        s.sat.quality = (block / 83) % 2 ? mixcore::sat::SatQuality::Studio : mixcore::sat::SatQuality::Live; // latency changes
+        s.sat.type = static_cast<mixcore::sat::SatType>(block % 4);
+        s.sat.driveDb = static_cast<float>(block % 30);
+        s.sat.autoGain = (block / 19) % 2 == 0;
         if (block == 400)
             strip.debleed().resetLearning();
         float* ptrs[2] = { l.data() + pos, r.data() + pos };
@@ -183,6 +189,7 @@ TEST_CASE("The full channel strip (Smart Gain + De-bleed + Gate) never allocates
         strip.replacer().readTelemetry(rt);
         strip.gain().readTelemetry(st);
         strip.comp().readTelemetry(ct);
+        strip.sat().readTelemetry(sst);
         allocations += check.counts().allocations;
         frees += check.counts().deallocations;
     }

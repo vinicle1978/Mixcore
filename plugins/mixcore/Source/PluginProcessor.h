@@ -5,6 +5,7 @@
 
 #include "mixcore/comp/CompCoach.h"
 #include "mixcore/eq/EqCoach.h"
+#include "mixcore/sat/SatCoach.h"
 #include "mixcore/strip/ChannelStrip.h"
 
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -59,6 +60,22 @@ public:
     bool readReplaceTelemetry(drum::ReplaceTelemetry& out) noexcept { return strip_.replacer().readTelemetry(out); }
     bool readEqTelemetry(eq::EqTelemetry& out) noexcept { return strip_.eq().readTelemetry(out); }
     bool readCompTelemetry(comp::CompTelemetry& out) noexcept { return strip_.comp().readTelemetry(out); }
+    bool readSatTelemetry(sat::SatTelemetry& out) noexcept { return strip_.sat().readTelemetry(out); }
+
+    // ---- Saturation (message thread) ----
+    /// Loads a saturation profile (saturation settings only) and switches saturation on.
+    bool loadSatProfile(const juce::String& name);
+    /// Listen & suggest: analyses the levels going into the saturation.
+    void startSatListen(double seconds);
+    void cancelSatListen() noexcept { satListener_.cancel(); }
+    bool satListening() const noexcept { return satListener_.listening(); }
+    bool satListenReady() const noexcept { return satListener_.ready(); }
+    float satListenProgress() const noexcept { return satListener_.progress(); }
+    comp::LevelStats satListenStats() const { return satListener_.stats(comp::Detector::Peak); }
+    std::vector<sat::SatSuggestion> satSuggestions() const;
+    /// Writes only what the suggestion changes (undoable) and switches saturation on.
+    void applySatSuggestion(const sat::SatSuggestion& s);
+    void pumpSatListener();
 
     // ---- Compressor (message thread) ----
     /// Loads a compressor profile (compressor settings only) and switches the compressor on.
@@ -153,6 +170,7 @@ private:
     void applyDrumToParameters(const drum::DrumSettings& d);
     void applyEqToParameters(const eq::EqSettings& e);
     void applyCompToParameters(const comp::CompSettings& c);
+    void applySatToParameters(const sat::SatSettings& s);
     void setEqBandParameters(int band, const eq::EqBand& b);
     void publishKit(std::unique_ptr<drum::SampleKit> kit, const juce::String& source);
     void setCurrentPreset(const juce::String& name, bool isUser, const strip::ChannelSettings& settings);
@@ -167,6 +185,7 @@ private:
     juce::AudioFormatManager formats_;
     eq::EqListener eqListener_;
     comp::CompListener compListener_;
+    comp::CompListener satListener_; // same level statistics, fed from the saturation input
     std::uint64_t eqFed_ = 0;
     std::vector<float> eqFrame_;
     strip::ChannelSettings currentPresetSettings_ {};

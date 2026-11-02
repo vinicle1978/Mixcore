@@ -7,6 +7,7 @@
 #include "ui/GatePanel.h"
 #include "ui/ModuleUi.h"
 #include "ui/ReplacePanel.h"
+#include "ui/SatPanel.h"
 #include "ui/Meters.h"
 #include "ui/Theme.h"
 
@@ -36,7 +37,7 @@ public:
     /// Rebuild the preset menu (factory + user presets from disk).
     void rebuildPresetMenu();
 
-    enum class Page { SmartGain, Gate, Drums, Eq, Comp };
+    enum class Page { SmartGain, Gate, Drums, Eq, Comp, Sat };
     void setPage(Page page);
     /// Drums page: show the Replace view (true) or the De-bleed view (false).
     void setDrumView(bool replace);
@@ -50,6 +51,8 @@ public:
             setPage(Page::Eq);
         else if (e.eventComponent == &compChip_)
             setPage(Page::Comp);
+        else if (e.eventComponent == &satChip_)
+            setPage(Page::Sat);
     }
 
 private:
@@ -95,23 +98,25 @@ private:
     juce::Label inputReadout_, outputReadout_;
     GainHistory history_;
     juce::Label activityLabel_;
-    juce::Label staticChip_, riderChip_, guardChip_, debleedChip_, gateChip_, eqChip_, compChip_;
+    juce::Label staticChip_, riderChip_, guardChip_, debleedChip_, gateChip_, eqChip_, compChip_, satChip_;
     juce::TextButton gainTab_ { "Smart Gain" };
     juce::TextButton gateTab_ { "Gate" };
     juce::TextButton drumTab_ { "Drums" };
     juce::TextButton eqTab_ { "EQ" };
     juce::TextButton compTab_ { "Comp" };
+    juce::TextButton satTab_ { "Sat" };
     PowerButton gainPower_ { "Smart Gain" };
     PowerButton gatePower_ { "Gate" };
     PowerButton drumPower_ { "Drums" };
     PowerButton eqPower_ { "EQ" };
     PowerButton compPower_ { "Compressor" };
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> gainPowerAtt_, gatePowerAtt_, drumPowerAtt_, eqPowerAtt_, compPowerAtt_;
+    PowerButton satPower_ { "Saturation" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> gainPowerAtt_, gatePowerAtt_, drumPowerAtt_, eqPowerAtt_, compPowerAtt_, satPowerAtt_;
     ModuleOffBanner offBanner_;
     juce::ComboBox sourceBox_;
     juce::Label sourceLabel_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> sourceAttachment_;
-    bool gainOn_ = true, gateOn_ = false, drumOn_ = false, eqOn_ = false, compOn_ = false;
+    bool gainOn_ = true, gateOn_ = false, drumOn_ = false, eqOn_ = false, compOn_ = false, satOn_ = false;
     int lastModuleKey_ = -1;
     gain::SourceType lastSource_ = static_cast<gain::SourceType>(-1); // forces the first update
     Page page_ = Page::SmartGain;
@@ -133,6 +138,9 @@ private:
     CompPanel compPanel_ { processor_ };
     CompSuggestPanel compSuggestPanel_ { processor_ };
     comp::CompTelemetry compTelemetry_;
+    SatPanel satPanel_ { processor_ };
+    SatSuggestPanel satSuggestPanel_ { processor_ };
+    sat::SatTelemetry satTelemetry_;
 
     // Main controls
     Knob target_, staticGain_, strength_;

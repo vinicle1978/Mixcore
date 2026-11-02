@@ -7,6 +7,7 @@
 #include "mixcore/drum/StarterKits.h"
 #include "mixcore/eq/EqProfiles.h"
 #include "mixcore/gate/GateProfiles.h"
+#include "mixcore/sat/SatProfiles.h"
 #include "mixcore/strip/ChannelPresets.h"
 
 namespace mixcore::plugin {
@@ -74,6 +75,7 @@ void MixCoreProcessor::timerCallback()
     strip_.replacer().kits().collectGarbage(); // frees kits the audio thread has finished with
     pumpEqListener();
     pumpCompListener();
+    pumpSatListener();
     const int latency = strip_.latencySamples();
     if (latency != getLatencySamples())
         setLatencySamples(latency);
@@ -195,6 +197,7 @@ void MixCoreProcessor::applySettingsToParameters(const strip::ChannelSettings& p
     applyDrumToParameters(target.drum);
     applyEqToParameters(target.eq);
     applyCompToParameters(target.comp);
+    applySatToParameters(target.sat);
     setParam(ids::smartGainOn, target.gainOn ? 1.0f : 0.0f);
     setParam(ids::sourceType, static_cast<float>(static_cast<int>(target.source)));
 }
@@ -438,6 +441,53 @@ void MixCoreProcessor::applyCompSuggestion(const comp::CompSuggestion& s)
     if (n.scHpfHz != b.scHpfHz) setParam(ids::compScHpf, n.scHpfHz);
     if (n.detector != b.detector) setParam(ids::compDetector, static_cast<float>(static_cast<int>(n.detector)));
     setParam(ids::compOn, 1.0f);
+}
+
+// --------------------------------------------------------- Saturation
+
+void MixCoreProcessor::applySatToParameters(const sat::SatSettings& s)
+{
+    setParam(ids::satOn, s.enabled ? 1.0f : 0.0f);
+    setParam(ids::satType, static_cast<float>(static_cast<int>(s.type)));
+    setParam(ids::satDrive, s.driveDb);
+    setParam(ids::satMix, s.mixPercent);
+    setParam(ids::satOutput, s.outputDb);
+    setParam(ids::satAutoGain, s.autoGain ? 1.0f : 0.0f);
+    setParam(ids::satQuality, static_cast<float>(static_cast<int>(s.quality)));
+}
+
+bool MixCoreProcessor::loadSatProfile(const juce::String& name)
+{
+    const auto* p = sat::findSatProfile(name.toStdString());
+    if (p == nullptr)
+        return false;
+    auto s = p->settings; // enabled == true
+    s.quality = reader_.readSat().quality; // keep the user's Live/Studio choice (it changes latency)
+    applySatToParameters(s);
+    return true;
+}
+
+void MixCoreProcessor::startSatListen(double seconds) { satListener_.start(seconds, strip_.sat().levelTap()); }
+
+void MixCoreProcessor::pumpSatListener() { satListener_.pump(strip_.sat().levelTap()); }
+
+std::vector<sat::SatSuggestion> MixCoreProcessor::satSuggestions() const
+{
+    const auto c = reader_.readChannel();
+    return sat::satSuggestions(satListener_.stats(comp::Detector::Peak), c.source, c.sat);
+}
+
+void MixCoreProcessor::applySatSuggestion(const sat::SatSuggestion& s)
+{
+    const auto& n = s.settings;
+    const auto& b = s.base;
+    if (n.type != b.type) setParam(ids::satType, static_cast<float>(static_cast<int>(n.type)));
+    if (n.driveDb != b.driveDb) setParam(ids::satDrive, n.driveDb);
+    if (n.mixPercent != b.mixPercent) setParam(ids::satMix, n.mixPercent);
+    if (n.outputDb != b.outputDb) setParam(ids::satOutput, n.outputDb);
+    if (n.autoGain != b.autoGain) setParam(ids::satAutoGain, n.autoGain ? 1.0f : 0.0f);
+    if (n.quality != b.quality) setParam(ids::satQuality, static_cast<float>(static_cast<int>(n.quality)));
+    setParam(ids::satOn, 1.0f);
 }
 
 // ------------------------------------------------------------- Kits

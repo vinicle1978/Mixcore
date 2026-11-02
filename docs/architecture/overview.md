@@ -19,7 +19,7 @@ a multi-channel audio engine, channel registry and routing do not exist yet).
 ┌───────────────┴───────────────────────────────┴────────────────┐
 │ modules/strip    (mixcore::strip) ChannelStrip:                │
 │                  Gain -> De-bleed -> Gate -> Replace -> EQ     │
-│                  -> Compressor,                                │
+│                  -> Compressor -> Saturation,                  │
 │                  channel presets, strip-level Mix Coach        │
 ├────────────────────────────────────────────────────────────────┤
 │ modules/gate     (mixcore::gate, no JUCE)                      │
@@ -34,6 +34,10 @@ a multi-channel audio engine, channel registry and routing do not exist yet).
 ├────────────────────────────────────────────────────────────────┤
 │ modules/comp     (mixcore::comp, no JUCE)                      │
 │   Compressor, LevelTap, CompCoach, CompProfiles, CompSettings  │
+├────────────────────────────────────────────────────────────────┤
+│ modules/sat      (mixcore::sat, no JUCE)                       │
+│   Saturator, Oversampler (4x halfband FIR), SatCurves,         │
+│   SatCoach, SatProfiles, SatSettings                           │
 ├────────────────────────────────────────────────────────────────┤
 │ modules/gain     (mixcore::gain, no JUCE)                      │
 │   SmartGainStage   ── realtime processor                       │

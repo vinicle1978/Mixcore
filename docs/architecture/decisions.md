@@ -247,6 +247,25 @@ compressor on. Nothing is applied without the user pressing Apply.
 **Why:** suggestions (threshold/ratio/makeup, attack) can be applied
 independently or together in any order without undoing each other.
 
+## ADR-033 — Saturation: last in the strip; Live (0 latency) or Studio (4x, 28 samples)
+**Decision:** saturation runs after the compressor. Live quality runs the curve
+at the host rate with no latency; Studio runs it 4x oversampled through two
+linear-phase halfband FIR stages (47 + 21 taps, integer 28-sample latency,
+reported only while saturation is on). The dry part of the mix shares the
+oversampled path. Quality is not automatable. Profiles keep the user's quality.
+**Why:** same live-first rule as drum replacement (ADR-025): zero latency by
+default, cleaner processing as an explicit, labelled choice. Linear-phase FIR
+gives an exact integer latency the host can compensate; sharing the path keeps
+parallel saturation free of comb filtering.
+
+## ADR-034 — Saturation auto gain on by default, with a fast start
+**Decision:** auto gain matches the saturated signal's loudness to the dry
+signal (300 ms averages, gated at -60 dBFS); just after switching on the
+averages start as running means so there is no loudness bump.
+**Why:** louder sounds "better"; level-matching lets people judge the colour.
+A slow tracker that starts from unity gave a jump when switching on (found by the
+switching test).
+
 ## Open decisions (need product input)
 * Plugin code `Mxcr` and the Windows installer AppId are kept; confirm they are
   final before the first public release.
